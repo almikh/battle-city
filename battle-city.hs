@@ -9,7 +9,6 @@ import Creators
 import KeyEvent
 import Sprite
 
-dt = 25
 screenWidth = 48*8
 screenHeight = 48*8
 
@@ -35,16 +34,13 @@ main = do
   keyboardCallback  $= Just (keyboard state)
   keyboardUpCallback  $= Just (keyboardUp state)
 
-  addTimerCallback dt (timer100 state)
+  addTimerCallback 25 (timerDt state 25)
+  addTimerCallback 15 (bulletsTimer state 15)
 
   mainLoop
 
 initMap :: IORef GameState -> IO ()
 initMap state = do
-  game <- readIORef state
-  let grid' = (grid game) // [((1, 1), 1), ((1, 5), 1)]
-
-  writeIORef state $ game { grid = grid' }
   putStrLn "Map loaded..."
 
 initSprites :: IORef GameState -> IO ()
@@ -56,29 +52,47 @@ initSprites state = do
   spriteGrass <- loadSprite "resources/grass.pic"
   spriteWater <- loadSprite "resources/water.pic"
   spriteBrick <- loadSprite "resources/brick.pic"
+  spriteBullet <- loadSprite "resources/bullet.pic"
 
   let sprites = [
         ("test", sprite),
         ("armor", spriteArmor),
         ("grass", spriteGrass),
         ("water", spriteWater),
-        ("brick", spriteBrick) ]
+        ("brick", spriteBrick),
+        ("bullet", spriteBullet) ]
   writeIORef state $ registrySprites game sprites
   putStrLn "Sprites loaded..."
 
 initObjects :: IORef GameState -> IO ()
 initObjects state = do
   game <- readIORef state
-  writeIORef state $ registryObject game $ createHero (2, 2)
+  let objs = [
+        createHero (2, 2),
+        createGrass (3, 3),
+        createGrass (4, 4),
+        createArmor (5, 5),
+        createBrick (5, 6),
+        createWater (7, 7)
+        ]
+  writeIORef state $ registryObjects game objs
   putStrLn "Objects loaded..."
 
 renderObject :: GameState -> Entity -> IO ()
 renderObject game obj= do
   let Just sprite = lookup (getSprite obj) (sprites game)
   let (x, y) = location obj
-  let (dx, dy) = diff obj
-  let dir = dir2rot $ direction obj
-  drawSpriteEx dir (x*cellSize + dx) (y*cellSize + dy) sprite (cellSize `div` 16)
+  let zoom = (cellSize `div` 16)
+  if isTank obj then do
+    let (dx, dy) = diff obj
+    let dir = dir2rot $ direction obj
+    drawSpriteEx dir (x*cellSize + dx) (y*cellSize + dy) sprite zoom
+    else if isBullet obj then do
+      let (dx, dy) = diff obj
+      drawSprite (x*cellSize + dx) (y*cellSize + dy) sprite zoom
+      else
+        drawSprite (x*cellSize) (y*cellSize) sprite zoom
+
 
 resize :: Size -> IO ()
 resize s@(Size w h) = do
@@ -103,7 +117,7 @@ display state = do
   currentColor $= Color4 1.0 1.0 1.0 1.0
   forM_ [0 .. width] $ \i ->
     forM_ [0 .. height] $ \j -> do
-      setPolygonMode' grid' i j
+      -- setPolygonMode' grid' i j
       renderPrimitive Quads $ do
         vertex $ Vertex3 (i2f (i*cellSize)) (i2f (j*cellSize)) 0
         vertex $ Vertex3 (i2f (i*cellSize)) (i2f ((j+1)*cellSize)) 0
@@ -111,7 +125,8 @@ display state = do
         vertex $ Vertex3 (i2f ((i+1)*cellSize)) (i2f (j*cellSize)) 0
 
   polygonMode $= (Line, Line)
-  mapM_ (\(_, o) -> renderObject game o) $ objects game
+  let sortFunc = \o1 o2 -> layer (snd o1) `compare` layer (snd o2)
+  mapM_ (\(_, o) -> renderObject game o) $ sortBy sortFunc $ objects game
   flush
 
 setPolygonMode' :: TGrid -> Int -> Int -> IO ()
@@ -119,14 +134,21 @@ setPolygonMode' g i j =
   if g ! (i, j) == 0 then polygonMode $= (Line, Line)
     else polygonMode $= (Fill, Fill)
 
-timer100 :: IORef GameState -> IO ()
-timer100 state = do
+timerDt :: IORef GameState -> Int -> IO ()
+timerDt state elapsed = do
   game <- readIORef state
   let pressed = pressedKey game
-  mapM_ (\(i, o) -> (onTimerCallback o) state pressed o) $ objects game
-  addTimerCallback dt (timer100 state)
+  mapM_ (\(i, o) -> (onTimerCallback o) state elapsed pressed o) $ objects game
+  addTimerCallback elapsed (timerDt state elapsed)
   return ()
 
+bulletsTimer :: IORef GameState -> Int -> IO ()
+bulletsTimer state elapsed = do
+  game <- readIORef state
+  let pressed = pressedKey game
+  mapM_ (\(i, o) -> (onTimerCallback o) state elapsed pressed o) $ filter (isBullet . snd) $ objects game
+  addTimerCallback elapsed (bulletsTimer state elapsed)
+  return ()
 
 idle :: IORef GameState -> IO ()
 idle state = do
@@ -137,7 +159,7 @@ keyboard :: IORef GameState -> Char -> Position -> IO ()
 keyboard state ch _ = do
   game <- readIORef state
   let key = event ch
-  mapM_ (\(i, o) -> (onKeyboardCallback o) state key o) $ objects game
+  -- mapM_ (\(i, o) -> (onKeyboardCallback o) state key o) $ objects game
   game <- readIORef state
   writeIORef state $ game { pressedKey = key }
 
