@@ -10,15 +10,14 @@ import KeyEvent
 import Sprite
 
 screenRect :: ((Int, Int), (Int, Int))
-screenRect = ((0, 0), (48*13, 48*13))
+screenRect = ((0, 0), (32*13, 32*13))
 
 type TLocation = (Int, Int)
 type TSize = (Int, Int)
 type TMessage = String
 
 type TKeyboardCallback = IORef GameState -> KeyboardEvent -> ID -> IO ()
-type TCollisionCallback = IORef GameState -> (Entity, Entity) -> IO ()
-type TTimerCallback = IORef GameState -> Int -> KeyboardEvent -> ID -> IO ()
+type TTimerCallback = IORef GameState -> Int -> ID -> IO ()
 
 type TGrid = Array (Int, Int) Int -- нумерация - с 0
 
@@ -46,7 +45,6 @@ data Entity =
     size :: TSize,
     health :: Int,
     sprite :: TAnimation,
-    onCollisionCallback :: TCollisionCallback,
     onKeyboardCallback :: TKeyboardCallback,
     onTimerCallback :: TTimerCallback
   } |
@@ -62,7 +60,6 @@ data Entity =
     recharges :: Int,
     sprite :: TAnimation,
     rechargeTime :: Int,
-    onCollisionCallback :: TCollisionCallback,
     onKeyboardCallback :: TKeyboardCallback,
     onTimerCallback :: TTimerCallback
   } |
@@ -76,7 +73,6 @@ data Entity =
     size :: TSize,
     health :: Int,
     sprite :: TAnimation,
-    onCollisionCallback :: TCollisionCallback,
     onKeyboardCallback :: TKeyboardCallback,
     onTimerCallback :: TTimerCallback
   } |
@@ -87,7 +83,6 @@ data Entity =
     location :: TLocation,
     health :: Int,
     sprite :: TAnimation,
-    onCollisionCallback :: TCollisionCallback,
     onKeyboardCallback :: TKeyboardCallback,
     onTimerCallback :: TTimerCallback
   } |
@@ -98,7 +93,6 @@ data Entity =
     location :: TLocation,
     health :: Int,
     sprite :: TAnimation,
-    onCollisionCallback :: TCollisionCallback,
     onKeyboardCallback :: TKeyboardCallback,
     onTimerCallback :: TTimerCallback
   }
@@ -212,25 +206,25 @@ changeLocation :: TLocation -> (Int, Int) -> TLocation
 changeLocation (x, y) (dx, dy) = (x+dx, y+dy)
 
 isTank :: Entity -> Bool
-isTank (Tank _ _ _ _ _ _ _ _ _ _ _ _ _ _) = True
+isTank (Tank _ _ _ _ _ _ _ _ _ _ _ _ _) = True
 isTank _ = False
 
 isBullet :: Entity -> Bool
-isBullet (Bullet _ _ _ _ _ _ _ _ _ _ _) = True
+isBullet (Bullet _ _ _ _ _ _ _ _ _ _) = True
 isBullet _ = False
 
 isObstacle :: Entity -> Bool
-isObstacle (Obstacle _ _ _ _ _ _ _ _ _ _ _ _) = True
+isObstacle (Obstacle _ _ _ _ _ _ _ _ _ _ _) = True
 isObstacle _ = False
 
 isBoom :: Entity -> Bool
-isBoom (Boom _ _ _ _ _ _ _ _ _) = True
+isBoom (Boom _ _ _ _ _ _ _ _) = True
 isBoom _ = False
 
 isStandart :: Entity -> Bool
-isStandart (Standart _ _ _ _ _ _ _ _ _) = True
+isStandart (Standart _ _ _ _ _ _ _ _) = True
 isStandart _ = False
 
 isImpassableObj :: Entity -> Bool
-isImpassableObj (Obstacle _ _ _ is _ _ _ _ _ _ _ _) = is
+isImpassableObj (Obstacle _ _ _ is _ _ _ _ _ _ _) = is
 isImpassableObj _ = True

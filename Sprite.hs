@@ -1,8 +1,17 @@
+{-# LANGUAGE TupleSections #-}
 module Sprite where
 
 import Control.Monad
 import Graphics.UI.GLUT
 import Graphics.Rendering.OpenGL
+
+import Control.Monad (when)
+import System.Exit (exitFailure)
+import System.IO (withBinaryFile, IOMode(ReadMode), openBinaryFile, hGetBuf)
+import Foreign.Marshal.Alloc (allocaBytes)
+
+import qualified Data.List as L
+import Data.Text
 
 data ColorType =
   IRGBA Int Int Int Int {- r, g, b, a \in [0, 255] -}
@@ -13,14 +22,12 @@ data RotationType = CLOCKWISE | ANTICLOCKWISE | VERTICAL_FLIP | ORIGINAL
 data Sprite = Sprite {
   width :: Int,
   height :: Int,
-  pixels :: [ColorType]
+  handle :: TextureObject
 }
 
 type TRect = ((Int, Int), (Int, Int))
 
 instance Show ColorType where
-  show (IRGBA r g b a) = (show r) ++ " " ++ (show g) ++ " " ++ (show b) ++ " " ++ (show a)
-  show (FRGBA r g b a) = (show r) ++ " " ++ (show g) ++ " " ++ (show b) ++ " " ++ (show a)
 
 dir2rot :: (Int, Int) -> RotationType
 dir2rot (0, -1) = VERTICAL_FLIP
@@ -28,53 +35,58 @@ dir2rot (1, 0) = CLOCKWISE
 dir2rot (-1, 0) = ANTICLOCKWISE
 dir2rot _ = ORIGINAL
 
-transform :: [Int] -> [ColorType]
-transform (r : g : b : a : others) = (IRGBA r g b a) : transform others
-transform [] = []
-
 loadSprite :: FilePath -> IO Sprite
 loadSprite file = do
-  contents <- readFile file
-  let (w : h : pxs) = map read $ words contents
-  return $ Sprite w h $ transform pxs
-
-createSprite :: Int -> Int -> ColorType -> Sprite
-createSprite w h color = Sprite w h pixels
-  where pixels = take (w*h) (repeat color)
+  -- putStrLn $ "loading " ++ file
+  let [_, w, h, _] = split (\c -> c=='.' || c=='_' || c=='x') $ pack file
+  let width = read $ unpack w
+      height = read $ unpack h
+  hTex <- withBinaryFile file ReadMode $ \h -> do
+    let bytes = width * height * 4
+    allocaBytes bytes $ \pixels -> do
+      bytes' <- hGetBuf h pixels bytes
+      when (bytes' /= bytes) exitFailure
+      [tex] <- genObjectNames 1
+      texture Texture2D $= Enabled
+      textureBinding Texture2D $= Just tex
+      build2DMipmaps Texture2D RGBA' (fromIntegral width) (fromIntegral height)
+        (PixelData RGBA UnsignedByte pixels)
+      textureFilter Texture2D $= ((Linear', Just Linear'), Linear')
+      textureWrapMode Texture2D S $= (Repeated, ClampToEdge)
+      textureWrapMode Texture2D T $= (Repeated, ClampToEdge)
+      textureBinding Texture2D $= Nothing
+      texture Texture2D $= Disabled
+      return tex
+  return $ (Sprite width height hTex)
 
 i2f :: Int -> GLfloat
 i2f = fromIntegral
 
-color4 :: ColorType -> Color4 GLfloat
-color4 (IRGBA r g b a) =
-  Color4 ((i2f r)/255.0) ((i2f g)/255.0) ((i2f b)/255.0) ((i2f a)/255.0)
-color4 (FRGBA r g b a) =
-  Color4 r g b a
+getTextureCoord :: RotationType -> [(GLdouble, GLdouble)]
+getTextureCoord ORIGINAL = [(0, 0), (0, 1), (1, 1), (1, 0)]
+getTextureCoord CLOCKWISE = [(1, 0), (0, 0), (0, 1), (1, 1)]
+getTextureCoord ANTICLOCKWISE = [(0, 1), (1, 1), (1, 0), (0, 0)]
+getTextureCoord VERTICAL_FLIP = [(1, 1), (1, 0), (0, 0), (0, 1)]
 
--- использовать только внутри renderPrimitive!
-drawPoint :: GLfloat -> GLfloat -> ColorType -> IO ()
-drawPoint i j color = do
-  currentColor $= color4 color
-  vertex $ Vertex3 i j 0
-
-collectPoint :: RotationType -> Int -> Int -> Double -> [(Double, Double)]
-collectPoint VERTICAL_FLIP w h zoom = map (\i ->
-  (fromIntegral (i `mod` w) * zoom, fromIntegral (h-(i `div` w)) * zoom)) [1 .. (w*h)]
-collectPoint ANTICLOCKWISE w h zoom = foldl1 (++) $ take h $ iterate (map (\(x, y) ->
-  (x-zoom, y))) [(fromIntegral w * zoom, fromIntegral x * zoom) | x <- [1 .. h]]
-collectPoint CLOCKWISE w h zoom = foldl1 (++) $ take h $ iterate (map (\(x, y) ->
-  (x+zoom, y))) [(zoom, fromIntegral x * zoom) | x <- [1 .. h]]
-collectPoint _ w h zoom = map (\i -> (fromIntegral (i `mod` w) * zoom, fromIntegral (i `div` w) * zoom)) [1 .. (w*h)]
-
--- Usage: drawSprite x y sprite pixelZoom
+-- рисует картинку в указанном прямоугольнике
 drawSprite :: Sprite -> TRect -> IO ()
-drawSprite sprite rect = drawSpriteEx ORIGINAL sprite rect
+drawSprite sprite rect = do
+  drawSpriteEx ORIGINAL sprite rect
 
 drawSpriteEx :: RotationType -> Sprite -> TRect -> IO ()
-drawSpriteEx rot (Sprite w h pxs) ((x, y), (rw, rh)) = do
-  let zoom = fromIntegral rw / fromIntegral w
-  let inds = map (\(i, j)-> ((fromIntegral x) + i, (fromIntegral y) + j)) $ collectPoint rot w h zoom
-  let draw = zipWith (\ind color -> (ind, color)) inds pxs
-  pointSize $= realToFrac zoom
-  renderPrimitive Points $ forM_ draw $ \((i, j), color) -> drawPoint (realToFrac i) (realToFrac j) color
-  pointSize $= 1.0
+drawSpriteEx rot sprite ((x, y), (w, h)) = do
+  let imgCoords = [(x, y), (x, y+h), (x+w, y+h), (x+w, y)]
+  let texCoords = getTextureCoord rot
+  drawSpriteEx' imgCoords texCoords sprite
+
+drawSpriteEx' :: [(Int, Int)] -> [(GLdouble, GLdouble)] -> Sprite -> IO ()
+drawSpriteEx' imgCoords texCoords sprite = do
+  texture Texture2D $= Enabled
+  textureBinding Texture2D $= Just (handle sprite)
+  color $ Color4 1 1 1 (1 :: GLdouble)
+  renderPrimitive Quads $ do
+    forM_ (L.zipWith (,) imgCoords texCoords) $ \((x, y), (tx, ty)) -> do
+      texCoord $ TexCoord2 tx ty
+      vertex $ Vertex2 (i2f x) (i2f y)
+  textureBinding Texture2D $= Nothing
+  texture Texture2D $= Disabled
