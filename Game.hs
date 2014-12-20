@@ -9,26 +9,31 @@ import Data.IORef
 import KeyEvent
 import Sprite
 
+screenRect :: ((Int, Int), (Int, Int))
+screenRect = ((0, 0), (48*13, 48*13))
+
 type TLocation = (Int, Int)
-type TSpeed = (Int, Int)
 type TSize = (Int, Int)
 type TMessage = String
 
-type TKeyboardCallback = IORef GameState -> KeyboardEvent -> Entity -> IO ()
+type TKeyboardCallback = IORef GameState -> KeyboardEvent -> ID -> IO ()
 type TCollisionCallback = IORef GameState -> (Entity, Entity) -> IO ()
-type TTimerCallback = IORef GameState -> Int -> KeyboardEvent -> Entity -> IO ()
+type TTimerCallback = IORef GameState -> Int -> KeyboardEvent -> ID -> IO ()
 
 type TGrid = Array (Int, Int) Int -- нумерация - с 0
+
+type TAnimation = [String]
 
 type ID = Int
 
 data GameState =
   GameState {
-    score :: Int,
+    fps :: Int,
+    maxId :: Int,
+    counter :: Int,
     objects :: [(ID, Entity)],
     sprites :: [(String, Sprite)],
-    pressedKey :: KeyboardEvent,
-    grid :: TGrid
+    pressedKey :: KeyboardEvent
   }
 
 data Entity =
@@ -36,9 +41,11 @@ data Entity =
     eId :: ID,
     layer :: Int, -- для порядка отрисовки объектов
     location :: TLocation,
-    speed :: TSpeed,
-    diff :: TLocation,
-    sprite :: String,
+    direction :: TLocation,
+    speed :: Int,
+    size :: TSize,
+    health :: Int,
+    sprite :: TAnimation,
     onCollisionCallback :: TCollisionCallback,
     onKeyboardCallback :: TKeyboardCallback,
     onTimerCallback :: TTimerCallback
@@ -48,12 +55,12 @@ data Entity =
     layer :: Int,
     location :: TLocation,
     direction :: TLocation,
-    diff :: TLocation,
-    speed :: TSpeed,
+    speed :: Int,
     size :: TSize,
     health :: Int,
+    lifetime :: Int,
     recharges :: Int,
-    sprite :: String,
+    sprite :: TAnimation,
     rechargeTime :: Int,
     onCollisionCallback :: TCollisionCallback,
     onKeyboardCallback :: TKeyboardCallback,
@@ -65,8 +72,32 @@ data Entity =
     location :: TLocation,
     isImpassable :: Bool,
     isDestroyed :: Bool,
+    isImmortal :: Bool,
+    size :: TSize,
     health :: Int,
-    sprite :: String,
+    sprite :: TAnimation,
+    onCollisionCallback :: TCollisionCallback,
+    onKeyboardCallback :: TKeyboardCallback,
+    onTimerCallback :: TTimerCallback
+  } |
+  Boom {
+    eId :: ID,
+    layer :: Int,
+    size :: TLocation,
+    location :: TLocation,
+    health :: Int,
+    sprite :: TAnimation,
+    onCollisionCallback :: TCollisionCallback,
+    onKeyboardCallback :: TKeyboardCallback,
+    onTimerCallback :: TTimerCallback
+  } |
+  Standart { -- знамя
+    eId :: ID,
+    layer :: Int,
+    size :: TLocation,
+    location :: TLocation,
+    health :: Int,
+    sprite :: TAnimation,
     onCollisionCallback :: TCollisionCallback,
     onKeyboardCallback :: TKeyboardCallback,
     onTimerCallback :: TTimerCallback
@@ -80,19 +111,22 @@ registrySprites :: GameState -> [(String, Sprite)] -> GameState
 registrySprites state sprs = state { sprites = sprs ++ (sprites state) }
 
 initGame :: GameState
-initGame = GameState 0 [] [] No (newGrid 8 8)
+initGame = GameState 0 1 0 [] [] No
 
 updateObject :: GameState -> Entity -> GameState
 updateObject state obj = state { objects = (updateObject' $ objects state) }
   where
+    updateObject' [] = []
     updateObject' ((ci, x) : xs) =
       if ci == (eId obj) then (ci, obj) : xs else (ci, x) : updateObject' xs
 
+updateObjects :: GameState -> [Entity] -> GameState
+updateObjects state objs = foldl updateObject state objs
+
 registryObject :: GameState -> Entity -> GameState
-registryObject state obj = state { objects = (newId, obj { eId = newId }) : (objects state), grid = newGrid }
+registryObject state obj = state { maxId = newId+1, objects = (newId, obj { eId = newId }) : (objects state) }
   where
     newId = genUniqueId state
-    newGrid = (grid state) // [(location obj, newId)]
 
 registryObjects :: GameState -> [Entity] -> GameState
 registryObjects state objs = foldl registryObject state objs
@@ -100,19 +134,22 @@ registryObjects state objs = foldl registryObject state objs
 deleteObject :: GameState -> Entity -> GameState
 deleteObject state obj = state { objects = deleteObject' $ objects state }
   where
+    deleteObject' [] = []
     deleteObject' ((i, o) : objs)
       | i == eId obj = objs
       | otherwise = (i, o) : deleteObject' objs
 
-genUniqueId :: GameState -> ID
-genUniqueId game = head $ dropWhile (\x -> isJust $ lookup x objs) [1 ..]
-  where objs = objects game
-
-getObjectFromCoord :: GameState -> (Int, Int) -> Entity
-getObjectFromCoord state pos = obj
+deleteObjectsIf :: GameState -> (Entity -> Bool) -> GameState
+deleteObjectsIf state isDeleted = state { objects = newObjects }
   where
-    grid' = grid state
-    Just obj = lookup (grid' ! pos) (objects state)
+    newObjects = filter (\(_, o) -> not (isDeleted o)) $ objects state
+
+-- чтобы не было возни с пересечение ID уничтоженного и вновь созданного объектов,
+-- они будут уникальными для ВСЕХ объектов (размерности Int'а, думаю, для этой игры хватит)
+genUniqueId :: GameState -> ID
+genUniqueId game = maxId game
+--genUniqueId game = head $ dropWhile (\x -> isJust $ lookup x objs) [1 ..]
+--  where objs = objects game
 
 -- Grid
 newGrid :: Int -> Int -> TGrid
@@ -135,11 +172,43 @@ isValidInd grid i j = l1 <= i && i <= width && l2 <= j && j <= height
 
 -- Entity
 getSprite :: Entity -> String
-getSprite tank@(Tank _ _ _ _ _ _ _ _ _ _ _ _ _ _) = sprite tank
-getSprite bullet@(Bullet _ _ _ _ _ _ _ _ _) = sprite bullet
-getSprite obst@(Obstacle _ _ _ _ _ _ _ _ _ _) = sprite obst
+getSprite obj = head $ sprite obj
 
-changeLocation :: TLocation -> TSpeed -> TLocation
+getRect :: Entity -> TRect
+getRect obj
+  | isBoom obj = let
+      (x, y) = location obj
+      (w, h) = size obj in
+      ((x - (w `div` 2), y - (h `div` 2)), (w, h))
+  | otherwise = (location obj, size obj)
+
+contains :: TRect -> TLocation -> Bool
+contains ((x1, y1), (w1, h1)) (x, y) = containsX && containsY
+  where
+    containsX = x1 < x && x < x1+w1
+    containsY = y1 < y && y < y1+h1
+
+containsEq :: TRect -> TLocation -> Bool
+containsEq ((x1, y1), (w1, h1)) (x, y) = containsX && containsY
+  where
+    containsX = x1 <= x && x <= x1+w1
+    containsY = y1 <= y && y <= y1+h1
+
+containsAny :: TRect -> [TLocation] -> Bool
+containsAny rect xs = any (==True) $ map (contains rect) xs
+
+isIntersect :: TRect -> TRect -> Bool
+isIntersect r1@((x1, y1), (w1, h1)) r2@((x2, y2), (w2, h2)) = fContains || sContains
+  where
+    fContains = containsAny r1 [(x2, y2), (x2+w2, y2), (x2+w2, y2+h2), (x2, y2+h2)]
+    sContains = containsAny r2 [(x1, y1), (x1+w1, y1), (x1+w1, y1+h1), (x1, y1+h1)]
+
+-- апервый прямоугольник содержит в себе второй
+containsRect :: TRect -> TRect -> Bool
+containsRect rect ((x, y), (w, h)) =
+  all (==True) $ map (containsEq rect) $ [(x, y), (x+w, y), (x+w, y+h), (x, y+h)]
+
+changeLocation :: TLocation -> (Int, Int) -> TLocation
 changeLocation (x, y) (dx, dy) = (x+dx, y+dy)
 
 isTank :: Entity -> Bool
@@ -147,13 +216,21 @@ isTank (Tank _ _ _ _ _ _ _ _ _ _ _ _ _ _) = True
 isTank _ = False
 
 isBullet :: Entity -> Bool
-isBullet (Bullet _ _ _ _ _ _ _ _ _) = True
+isBullet (Bullet _ _ _ _ _ _ _ _ _ _ _) = True
 isBullet _ = False
 
 isObstacle :: Entity -> Bool
-isObstacle (Obstacle _ _ _ _ _ _ _ _ _ _) = True
+isObstacle (Obstacle _ _ _ _ _ _ _ _ _ _ _ _) = True
 isObstacle _ = False
 
+isBoom :: Entity -> Bool
+isBoom (Boom _ _ _ _ _ _ _ _ _) = True
+isBoom _ = False
+
+isStandart :: Entity -> Bool
+isStandart (Standart _ _ _ _ _ _ _ _ _) = True
+isStandart _ = False
+
 isImpassableObj :: Entity -> Bool
-isImpassableObj (Obstacle _ _ _ is _ _ _ _ _ _) = is
+isImpassableObj (Obstacle _ _ _ is _ _ _ _ _ _ _ _) = is
 isImpassableObj _ = True

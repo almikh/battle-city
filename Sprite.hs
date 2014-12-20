@@ -16,6 +16,8 @@ data Sprite = Sprite {
   pixels :: [ColorType]
 }
 
+type TRect = ((Int, Int), (Int, Int))
+
 instance Show ColorType where
   show (IRGBA r g b a) = (show r) ++ " " ++ (show g) ++ " " ++ (show b) ++ " " ++ (show a)
   show (FRGBA r g b a) = (show r) ++ " " ++ (show g) ++ " " ++ (show b) ++ " " ++ (show a)
@@ -50,28 +52,29 @@ color4 (FRGBA r g b a) =
   Color4 r g b a
 
 -- использовать только внутри renderPrimitive!
-drawPoint :: Int -> Int -> ColorType -> IO ()
+drawPoint :: GLfloat -> GLfloat -> ColorType -> IO ()
 drawPoint i j color = do
   currentColor $= color4 color
-  vertex $ Vertex3 (i2f i) (i2f j) 0
+  vertex $ Vertex3 i j 0
 
-collectPoint :: RotationType -> Int -> Int -> Int -> [(Int, Int)]
-collectPoint VERTICAL_FLIP w h zoom = map (\i -> ((i `mod` w)*zoom, (h-(i `div` w))*zoom)) [1 .. (w*h)]
-collectPoint ANTICLOCKWISE w h zoom = foldl1 (++) $ take h $ iterate (map (\(x, y) -> (x-zoom, y))) [(w*zoom, x*zoom) | x <- [1 .. h]]
-collectPoint CLOCKWISE w h zoom = foldl1 (++) $ take h $ iterate (map (\(x, y) -> (x+zoom, y))) [(zoom, x*zoom) | x <- [1 .. h]]
-collectPoint _ w h zoom = map (\i -> ((i `mod` w)*zoom, (i `div` w)*zoom)) [1 .. (w*h)]
+collectPoint :: RotationType -> Int -> Int -> Double -> [(Double, Double)]
+collectPoint VERTICAL_FLIP w h zoom = map (\i ->
+  (fromIntegral (i `mod` w) * zoom, fromIntegral (h-(i `div` w)) * zoom)) [1 .. (w*h)]
+collectPoint ANTICLOCKWISE w h zoom = foldl1 (++) $ take h $ iterate (map (\(x, y) ->
+  (x-zoom, y))) [(fromIntegral w * zoom, fromIntegral x * zoom) | x <- [1 .. h]]
+collectPoint CLOCKWISE w h zoom = foldl1 (++) $ take h $ iterate (map (\(x, y) ->
+  (x+zoom, y))) [(zoom, fromIntegral x * zoom) | x <- [1 .. h]]
+collectPoint _ w h zoom = map (\i -> (fromIntegral (i `mod` w) * zoom, fromIntegral (i `div` w) * zoom)) [1 .. (w*h)]
 
 -- Usage: drawSprite x y sprite pixelZoom
-drawSprite :: Int -> Int -> Sprite -> Int -> IO ()
-drawSprite x y (Sprite w h pxs) zoom = drawSpriteEx ORIGINAL x y (Sprite w h pxs) zoom
+drawSprite :: Sprite -> TRect -> IO ()
+drawSprite sprite rect = drawSpriteEx ORIGINAL sprite rect
 
-drawSprite' :: (Int, Int) -> Sprite -> Int -> IO ()
-drawSprite' (x, y) sprite zoom = drawSprite x y sprite zoom
-
-drawSpriteEx :: RotationType -> Int -> Int -> Sprite -> Int -> IO ()
-drawSpriteEx rot x y (Sprite w h pxs) zoom = do
-  let inds = map (\(i, j)-> (x+i, y+j)) $ collectPoint rot w h zoom
+drawSpriteEx :: RotationType -> Sprite -> TRect -> IO ()
+drawSpriteEx rot (Sprite w h pxs) ((x, y), (rw, rh)) = do
+  let zoom = fromIntegral rw / fromIntegral w
+  let inds = map (\(i, j)-> ((fromIntegral x) + i, (fromIntegral y) + j)) $ collectPoint rot w h zoom
   let draw = zipWith (\ind color -> (ind, color)) inds pxs
-  pointSize $= i2f zoom
-  renderPrimitive Points $ forM_ draw $ \((i, j), color) -> drawPoint i j color
+  pointSize $= realToFrac zoom
+  renderPrimitive Points $ forM_ draw $ \((i, j), color) -> drawPoint (realToFrac i) (realToFrac j) color
   pointSize $= 1.0
