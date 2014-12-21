@@ -12,6 +12,15 @@ import Sprite
 screenRect :: ((Int, Int), (Int, Int))
 screenRect = ((0, 0), (32*13, 32*13))
 
+slowDt :: Int
+slowDt = 50
+
+averageDt :: Int
+averageDt = 33
+
+fastDt :: Int
+fastDt = 25
+
 type TLocation = (Int, Int)
 type TSize = (Int, Int)
 type TMessage = String
@@ -93,6 +102,15 @@ data Entity =
     location :: TLocation,
     health :: Int,
     sprite :: TAnimation,
+    onKeyboardCallback :: TKeyboardCallback,
+    onTimerCallback :: TTimerCallback
+  } |
+  RespawnPoint { -- отсюда будут появляться вражеские танки
+    eId :: ID,
+    time :: Int,
+    layer :: Int,
+    size :: TLocation,
+    location :: TLocation,
     onKeyboardCallback :: TKeyboardCallback,
     onTimerCallback :: TTimerCallback
   }
@@ -224,6 +242,10 @@ isBoom _ = False
 isStandart :: Entity -> Bool
 isStandart (Standart _ _ _ _ _ _ _ _) = True
 isStandart _ = False
+
+isRespawnPoint :: Entity -> Bool
+isRespawnPoint (RespawnPoint _ _ _ _ _ _ _) = True
+isRespawnPoint _ = False
 
 isImpassableObj :: Entity -> Bool
 isImpassableObj (Obstacle _ _ _ is _ _ _ _ _ _ _) = is

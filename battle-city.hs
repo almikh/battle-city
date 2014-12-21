@@ -40,7 +40,9 @@ main = do
   keyboardCallback  $= Just (keyboard state)
   keyboardUpCallback  $= Just (keyboardUp state)
 
-  addTimerCallback 25 (timerDt state 25)
+  addTimerCallback slowDt (timerDt state slowDt)
+  addTimerCallback averageDt (timerDt state averageDt)
+  addTimerCallback fastDt (timerDt state fastDt)
   addTimerCallback 12 (bulletsTimer state 12)
   addTimerCallback 100 (animTimer state 100)
   addTimerCallback 1000 (fpsTimer state 1000)
@@ -68,7 +70,10 @@ initMap state = do
         4 -> do
           let obj = createStandart (i*ds, j*ds)
           writeIORef state $ registryObject game obj
-        otherwise -> return ()
+        5 -> do
+          let obj = createRespawnPoint (i*ds, j*ds)
+          writeIORef state $ registryObject game obj
+        _ -> return ()
   putStrLn "Map loaded..."
 
 initSprites :: IORef GameState -> IO ()
@@ -128,12 +133,22 @@ initObjects state = do
 renderObject :: GameState -> Entity -> IO ()
 renderObject game obj
   | isTank obj = do
-    let dir = dir2rot $ direction obj
+    let Just sprite = lookup (getSprite obj) (sprites game)
+        dir = dir2rot $ direction obj
     drawSpriteEx dir sprite rect
+  | isRespawnPoint obj = do
+    polygonMode $= (Line, Line)
+    currentColor $= Color4 1.0 1.0 1.0 1.0
+    renderPrimitive Quads $ do
+      vertex $ Vertex2 (i2f (x+borderSize)) (i2f (y+borderSize))
+      vertex $ Vertex2 (i2f (x+borderSize)) (i2f (y+h+borderSize))
+      vertex $ Vertex2 (i2f (x+w+borderSize)) (i2f (y+h+borderSize))
+      vertex $ Vertex2 (i2f (x+w+borderSize)) (i2f (y+borderSize))
+    polygonMode $= (Fill, Fill)
   | otherwise = do
+    let Just sprite = lookup (getSprite obj) (sprites game)
     drawSprite sprite rect
     where
-      Just sprite = lookup (getSprite obj) (sprites game)
       objRect@((x, y), (w, h)) = getRect obj
       rect = ((x+borderSize, y+borderSize), (w, h))
 
