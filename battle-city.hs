@@ -14,6 +14,8 @@ import System.Exit(exitFailure)
 import System.IO(withBinaryFile, IOMode(ReadMode), openBinaryFile, hGetBuf)
 import Foreign.Marshal.Alloc(allocaBytes)
 
+borderSize = 32
+
 main :: IO ()
 main = do
   (this, args) <- getArgsAndInitialize
@@ -21,7 +23,7 @@ main = do
   state <- newIORef $ initGame
 
   window <- createWindow "Battle City"
-  windowSize $= Size (32*13 + 128) (32*13)
+  windowSize $= Size (32*13 + 64 + 32*2) (32*13 + 32*2)
   initialDisplayMode $= [ RGBAMode, DoubleBuffered, WithDepthBuffer ]
 
   blend $= Enabled
@@ -31,6 +33,7 @@ main = do
   initSprites state
   initObjects state
 
+  clearColor $= Color4 0.45 0.45 0.45 1.0
   idleCallback $= Just (idle state)
   displayCallback $= (display state)
   reshapeCallback $= Just resize
@@ -48,36 +51,22 @@ initMap :: IORef GameState -> IO ()
 initMap state = do
   grid <- loadMap "grid.map"
   let h = gridHeight grid
+      ds = cellSize `div` 2
   forM_ [0 .. gridWidth grid] $ \i ->
     forM_ [0 .. gridHeight grid] $ \j -> do
+      game <- readIORef state
       case grid ! (h-j, i) of
         1 -> do
-          game <- readIORef state
-          let objs = [
-                createBrick (i*cellSize, j*cellSize),
-                createBrick (i*cellSize+16, j*cellSize),
-                createBrick (i*cellSize, j*cellSize+16),
-                createBrick (i*cellSize+16, j*cellSize+16)]
-          writeIORef state $ registryObjects game objs
+          let obj = createBrick (i*ds, j*ds)
+          writeIORef state $ registryObject game obj
         2 -> do
-          game <- readIORef state
-          let objs = [
-                createArmor (i*cellSize, j*cellSize),
-                createArmor (i*cellSize+16, j*cellSize),
-                createArmor (i*cellSize, j*cellSize+16),
-                createArmor (i*cellSize+16, j*cellSize+16)]
-          writeIORef state $ registryObjects game objs
+          let obj = createArmor (i*ds, j*ds)
+          writeIORef state $ registryObject game obj
         3 -> do
-          game <- readIORef state
-          let objs = [
-                createGrass (i*cellSize, j*cellSize),
-                createGrass (i*cellSize+16, j*cellSize),
-                createGrass (i*cellSize, j*cellSize+16),
-                createGrass (i*cellSize+16, j*cellSize+16)]
-          writeIORef state $ registryObjects game objs
+          let obj = createGrass (i*ds, j*ds)
+          writeIORef state $ registryObject game obj
         4 -> do
-          game <- readIORef state
-          let obj = createStandart (i*cellSize, j*cellSize)
+          let obj = createStandart (i*ds, j*ds)
           writeIORef state $ registryObject game obj
         otherwise -> return ()
   putStrLn "Map loaded..."
@@ -145,7 +134,8 @@ renderObject game obj
     drawSprite sprite rect
     where
       Just sprite = lookup (getSprite obj) (sprites game)
-      rect@((x, y), (w, h)) = getRect obj
+      objRect@((x, y), (w, h)) = getRect obj
+      rect = ((x+borderSize, y+borderSize), (w, h))
 
 resize :: Size -> IO ()
 resize s@(Size w h) = do
@@ -154,28 +144,34 @@ resize s@(Size w h) = do
   loadIdentity
   ortho2D 0 (realToFrac w) 0 (realToFrac h)
 
-
 display :: IORef GameState -> IO ()
 display state = do
   clear [ ColorBuffer, DepthBuffer ]
+
+  currentColor $= Color4 0.0 0.0 0.0 1.0
+  renderPrimitive Quads $ do
+    vertex $ Vertex3 (i2f borderSize) (i2f borderSize) 0
+    vertex $ Vertex3 (i2f borderSize) (i2f (borderSize+screenHeight)) 0
+    vertex $ Vertex3 (i2f (borderSize+screenWidth)) (i2f (borderSize+screenHeight)) 0
+    vertex $ Vertex3 (i2f (borderSize+screenWidth)) (i2f borderSize) 0
+
   currentColor $= Color4 1.0 1.0 1.0 1.0
   game <- readIORef state
   writeIORef state $ game { counter = counter game + 1 }
   game <- readIORef state
 
-  polygonMode $= (Fill, Fill)
+  -- polygonMode $= (Fill, Fill)
   let sortFunc = \o1 o2 -> layer (snd o1) `compare` layer (snd o2)
   mapM_ (\(_, o) -> renderObject game o) $ sortBy sortFunc $ objects game
 
   let standart = snd $ head $ filter (isStandart . snd) $ objects game
   when (health standart > 1) $ do
     currentColor $= Color4 0.0 0.0 0.0 0.7
-    polygonMode $= (Fill, Fill)
     renderPrimitive Quads $ do
-      vertex $ Vertex3 (i2f 0) (i2f 0) 0
-      vertex $ Vertex3 (i2f 0) (i2f (0+screenHeight)) 0
-      vertex $ Vertex3 (i2f (0+screenWidth)) (i2f (0+screenHeight)) 0
-      vertex $ Vertex3 (i2f (0+screenWidth)) (i2f 0) 0
+      vertex $ Vertex3 (i2f borderSize) (i2f borderSize) 0
+      vertex $ Vertex3 (i2f borderSize) (i2f (borderSize+screenHeight)) 0
+      vertex $ Vertex3 (i2f (borderSize+screenWidth)) (i2f (borderSize+screenHeight)) 0
+      vertex $ Vertex3 (i2f (borderSize+screenWidth)) (i2f borderSize) 0
     let Just sprite@(Sprite w h _) = lookup "gameover" $ sprites game
     let rect = (((screenWidth-w) `div` 2, (screenHeight-h) `div` 2), (w, h))
     currentColor $= Color4 1.0 1.0 1.0 1.0
@@ -197,8 +193,9 @@ animTimer state elapsed = do
 timerDt :: IORef GameState -> Int -> IO ()
 timerDt state elapsed = do
   game <- readIORef state
-  let key = pressedKey game
-  mapM_ (\(i, o) -> (onKeyboardCallback o) state key i) $ objects game
+  forM_ (keys game) $ \key -> do
+    game <- readIORef state
+    mapM_ (\(i, o) -> (onKeyboardCallback o) state key i) $ objects game
 
   game <- readIORef state
   mapM_ (\(i, o) -> (onTimerCallback o) state elapsed i) $ objects game
@@ -231,10 +228,12 @@ keyboard state ch _ = do
   let standart = snd $ head $ filter (isStandart . snd) $ objects game
   when (health standart == 1) $ do
     let key = event ch
-    writeIORef state $ game { pressedKey = key }
+        oldKeys = delete key (keys game)
+    writeIORef state $ game { keys = oldKeys ++ [key] }
 
 keyboardUp :: IORef GameState -> Char -> Position -> IO ()
 keyboardUp state ch _ = do
   game <- readIORef state
-  writeIORef state $ game { pressedKey = No }
+  let key = event ch
+  writeIORef state $ game { keys = delete key (keys game) }
   return ()
