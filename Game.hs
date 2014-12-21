@@ -50,6 +50,7 @@ data Entity =
     layer :: Int, -- для порядка отрисовки объектов
     location :: TLocation,
     direction :: TLocation,
+    side :: Int, -- кто стрелял
     speed :: Int,
     size :: TSize,
     health :: Int,
@@ -64,8 +65,10 @@ data Entity =
     direction :: TLocation,
     speed :: Int,
     size :: TSize,
+    side :: Int,
     health :: Int,
     lifetime :: Int,
+    duration :: Int,
     recharges :: Int,
     sprite :: TAnimation,
     rechargeTime :: Int,
@@ -107,8 +110,9 @@ data Entity =
   } |
   RespawnPoint { -- отсюда будут появляться вражеские танки
     eId :: ID,
-    time :: Int,
     layer :: Int,
+    health :: Int,
+    duration :: Int,
     size :: TLocation,
     location :: TLocation,
     onKeyboardCallback :: TKeyboardCallback,
@@ -210,8 +214,12 @@ containsAny :: TRect -> [TLocation] -> Bool
 containsAny rect xs = any (==True) $ map (contains rect) xs
 
 isIntersect :: TRect -> TRect -> Bool
-isIntersect r1@((x1, y1), (w1, h1)) r2@((x2, y2), (w2, h2)) = fContains || sContains
+isIntersect r1@((x1, y1), (w1, h1)) r2@((x2, y2), (w2, h2)) = fContains || sContains || fPartContains || sPartContains
   where
+    fPartContains = (x1==x2 && (x1+w1)==(x2+w2) && ((y2<=y1 && y1 <=(y2+h2)) || (y2<=(y1+h1) && (y1+h1)<=(y2+h2)))) ||
+      (y1==y2 && (y1+h1)==(y2+h2) && ((x2<=x1 && x1<=(x2+w2)) || (x2<=(x1+w1) && (x1+w1)<=(x2+w2))))
+    sPartContains = (x2==x1 && (x2+w2)==(x1+w1) && ((y1<=y2 && y2<=(y1+h1)) || (y1<=(y2+h2) && (y2+h2)<=(y1+h1)))) ||
+        (y2==y1 && (y2+h2)==(y1+h1) && ((x1<=x2 && x2<=(x1+w1)) || (x1<=(x2+w2) && (x2+w2)<=(x1+w1))))
     fContains = containsAny r1 [(x2, y2), (x2+w2, y2), (x2+w2, y2+h2), (x2, y2+h2)]
     sContains = containsAny r2 [(x1, y1), (x1+w1, y1), (x1+w1, y1+h1), (x1, y1+h1)]
 
@@ -224,11 +232,11 @@ changeLocation :: TLocation -> (Int, Int) -> TLocation
 changeLocation (x, y) (dx, dy) = (x+dx, y+dy)
 
 isTank :: Entity -> Bool
-isTank (Tank _ _ _ _ _ _ _ _ _ _ _ _ _) = True
+isTank (Tank _ _ _ _ _ _ _ _ _ _ _ _ _ _ _) = True
 isTank _ = False
 
 isBullet :: Entity -> Bool
-isBullet (Bullet _ _ _ _ _ _ _ _ _ _) = True
+isBullet (Bullet _ _ _ _ _ _ _ _ _ _ _) = True
 isBullet _ = False
 
 isObstacle :: Entity -> Bool
@@ -244,7 +252,7 @@ isStandart (Standart _ _ _ _ _ _ _ _) = True
 isStandart _ = False
 
 isRespawnPoint :: Entity -> Bool
-isRespawnPoint (RespawnPoint _ _ _ _ _ _ _) = True
+isRespawnPoint (RespawnPoint _ _ _ _ _ _ _ _) = True
 isRespawnPoint _ = False
 
 isImpassableObj :: Entity -> Bool

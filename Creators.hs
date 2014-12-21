@@ -17,6 +17,9 @@ screenWidth = 32*13
 screenHeight :: Int
 screenHeight = 32*13
 
+respawnTime :: Int
+respawnTime = 250000
+
 loadMap :: FilePath -> IO TGrid
 loadMap file = do
   contents <- readFile file
@@ -31,10 +34,37 @@ getDir key = case key of
   MoveBackward -> (0, -1)
   otherwise -> (0, 0)
 
+rotateClockwise :: (Int, Int) -> (Int, Int)
+rotateClockwise (1, 0) = (0, -1)
+rotateClockwise (0, 1) = (1, 0)
+rotateClockwise (-1, 0) = (0, 1)
+rotateClockwise (0, -1) = (-1, 0)
+rotateClockwise _ = (0, 0)
+
+rotateAntiClockwise :: (Int, Int) -> (Int, Int)
+rotateAntiClockwise (1, 0) = (0, 1)
+rotateAntiClockwise (0, 1) = (-1, 0)
+rotateAntiClockwise (-1, 0) = (0, -1)
+rotateAntiClockwise (0, -1) = (1, 0)
+rotateAntiClockwise _ = (0, 0)
+
 notImmortalObject :: Entity -> Bool
 notImmortalObject o
   | isRespawnPoint o = False
   | isObstacle o = isDestroyed o
+  | otherwise = True
+
+isCollidingObject :: Entity -> Bool
+isCollidingObject o
+  | isRespawnPoint o = False
+  | isBoom o = False
+  | isObstacle o = isImpassable o && not (isImmortal o)
+  | otherwise = True
+
+notEffect :: Entity -> Bool
+notEffect o
+  | isBoom o = False
+  | isBullet o = False
   | otherwise = True
 
 createTank :: (Int, Int) -> Entity
@@ -44,18 +74,21 @@ createTank pos = Tank {
     location = pos,
     direction = (0, 1),
     lifetime = 0,
-    speed = 2,
+    duration = 0,
+    side = 0,
+    speed = cellSize `div` 16,
     size = (cellSize, cellSize),
     recharges = 0,
     health = 1,
     sprite = [ "star:0", "star:1", "star:2", "star:3" ],
     rechargeTime = 1000,
-    onKeyboardCallback = (\_ key obj -> return ()), -- никак не реагирует
-    onTimerCallback = (\_ _ obj -> return ())
+    onKeyboardCallback = (\_ _ _ -> return ()), -- никак не реагирует
+    onTimerCallback = (\_ _ _ -> return ())
   }
 
 createHero :: (Int, Int) -> Entity
 createHero pos = tank {
+    side = 1,
     onKeyboardCallback = keyboardCallback,
     onTimerCallback = timerCallback
   }
@@ -65,12 +98,13 @@ createHero pos = tank {
     keyboardCallback state Fire id' = do
       game <- readIORef state
       let idea = lookup id' $ objects game
-      when (isJust idea && (lifetime (fromJust idea) >= 3)) $ do -- Во время этого шага таймера объекты могут измениться внутри forM_, поэтму пришлось обращаться к ним через индексы
+      when (isJust idea && (lifetime (fromJust idea) >= 3)) $ do
+        -- Во время этого шага таймера объекты могут измениться внутри forM_, поэтму пришлось обращаться к ним через индексы
         let obj = fromJust idea
         when (recharges obj <= 0) $ do
           let updState = updateObject game $ obj { recharges = rechargeTime obj }
           let bulletDir@(dx, dy) = direction obj
-          let bullet = createBullet (0, 0) bulletDir
+          let bullet = createBullet 1 (0, 0) bulletDir
           let (x, y) = location obj
           let (ow, oh) = size obj
           let (bw, bh) = size bullet
@@ -85,8 +119,8 @@ createHero pos = tank {
         let newDir@(xdir, ydir) = getDir key
         let newLocation@(nx, ny) = changeLocation (location obj) (xdir*spd, ydir*spd)
         let newObj = obj { location = newLocation, direction = newDir }
-        let otherObjs = filter (\(i, o) -> i /= eId obj && not (isBullet o)) $ objects game
-        let collision = filter (\(i, o) -> (getRect newObj) `isIntersect` (getRect o)) $ otherObjs
+        let others = filter (\(i, o) -> i /= eId obj && notEffect o) $ objects game
+        let collision = filter (\(i, o) -> (getRect newObj) `isIntersect` (getRect o)) $ others
         let obstacles = filter (\(i, o) -> (isObstacle o && isImpassable o) || isTank o) collision
         if null obstacles && (containsRect screenRect (getRect newObj)) then
           writeIORef state $ updateObject game newObj
@@ -97,8 +131,8 @@ createHero pos = tank {
       let idea = lookup id' $ objects game
       when (isJust idea) $ do
         let obj = fromJust idea
-        if (lifetime obj == 3) then
-          writeIORef state $ updateObject game $ obj { lifetime = lifetime obj + 1, sprite = ["test"] }
+        if (lifetime obj == 6) then
+          writeIORef state $ updateObject game $ obj { lifetime = lifetime obj + 1, sprite = ["tank"] }
           else do
             let (s:ss) = sprite obj
             writeIORef state $ updateObject game $ obj { lifetime = lifetime obj + 1, sprite = (ss ++ [s]) }
@@ -106,70 +140,124 @@ createHero pos = tank {
       when (dt==averageDt) $ do
         game <- readIORef state
         let idea = lookup id' $ objects game
-        when (isJust idea && (lifetime (fromJust idea) >= 3)) $ do
+        when (isJust idea && (lifetime (fromJust idea) >= 6)) $ do
           let obj = fromJust idea
           let newRecharge = (\r -> if r /= 0 then r - 25 else r) $ recharges obj
           writeIORef state $ updateObject game $ obj { recharges = newRecharge }
 
 createSlowTank :: (Int, Int) -> Entity
 createSlowTank pos = tank {
-    speed = 4,
-    onKeyboardCallback = keyboardCallback,
+    side = 0,
+    onKeyboardCallback = (\_ _ _ -> return ()),
     onTimerCallback = timerCallback
   }
   where
     tank = createTank pos
-    keyboardCallback state key id' = return ()
-
     timerCallback state 100 id' = do -- анимация
       game <- readIORef state
       let idea = lookup id' $ objects game
       when (isJust idea) $ do
         let obj = fromJust idea
-        if (lifetime obj == 3) then
-          writeIORef state $ updateObject game $ obj { lifetime = lifetime obj + 1, sprite = ["test"] }
+        if (lifetime obj == 6) then
+          writeIORef state $ updateObject game $ obj { lifetime = lifetime obj + 1, sprite = ["tank"] }
           else do
             let (s:ss) = sprite obj
             writeIORef state $ updateObject game $ obj { lifetime = lifetime obj + 1, sprite = (ss ++ [s]) }
     timerCallback state dt id' = do
-      when (dt==slowDt) $ do
+      game <- readIORef state
+      let idea = lookup id' $ objects game
+      when (dt==slowDt && isJust idea && (lifetime (fromJust idea) >= 6)) $ do
+        let obj = fromJust idea
+        -- проверка выстрела
+        num <- randomIO :: IO Int
+        when (num `mod` 32 == 0 && recharges obj <= 0) $ do
+          let updState = updateObject game $ obj { recharges = rechargeTime obj }
+          let bulletDir@(dx, dy) = direction obj
+          let bullet = createBullet 0 (0, 0) bulletDir
+          let (x, y) = location obj
+          let (ow, oh) = size obj
+          let (bw, bh) = size bullet
+          let bulletPos = (x + ((ow-bw) `div` 2) + (dx*ow) `div` 2, y + ((oh-bh) `div` 2) + (dy*oh) `div` 2)
+          writeIORef state $ registryObject updState $ bullet { location = bulletPos }
+        -- ИИ для движения
         game <- readIORef state
-        let idea = lookup id' $ objects game
-        when (isJust idea && (lifetime (fromJust idea) >= 3)) $ do
-          let obj = fromJust idea
-              newRecharge = (\r -> if r /= 0 then r - 25 else r) $ recharges obj
-              spd = speed obj
-              otherObjs = filter (\(i, o) -> i /= id' && not (isBullet o)) $ objects game
-          if direction obj == (0, 0) then do
-            dir <- randomIO :: IO Int
+        let Just obj = lookup id' $ objects game
+        let spd = speed obj
+        let others = filter (\(i, o) -> i /= id' && notEffect o) $ objects game
+        let newDuration = duration obj + dt
+        let newRecharge = (\r -> if r /= 0 then r - 25 else r) $ recharges obj
+        let changeDirection = \o -> do
+            num <- randomIO :: IO Int
             part <- randomIO :: IO Int
-            let newDir@(xdir, ydir) = if part `mod` 2 == 0 then (dir `mod` 3 - 1, 0) else (0, dir `mod` 3 - 1)
-                newLocation@(nx, ny) = changeLocation (location obj) (xdir*spd, ydir*spd)
-                newObj = obj { location = newLocation, recharges = newRecharge }
-                collision = filter (\(i, o) -> (getRect newObj) `isIntersect` (getRect o)) $ otherObjs
-            if (null collision && containsRect screenRect (getRect newObj)) then
-              writeIORef state $ updateObject game $ obj { direction = newDir, recharges = newRecharge }
-              else writeIORef state $ updateObject game $ obj { recharges = newRecharge }
-            else do
-              let newDir@(xdir, ydir) = direction obj
-                  newLocation@(nx, ny) = changeLocation (location obj) (xdir*spd, ydir*spd)
-                  newObj = obj { location = newLocation, recharges = newRecharge }
-                  collision = filter (\(i, o) -> (getRect newObj) `isIntersect` (getRect o)) $ otherObjs
-              if null collision && containsRect screenRect (getRect newObj) then
-                writeIORef state $ updateObject game newObj
-                else writeIORef state $ updateObject game $ obj { direction = (0, 0), recharges = newRecharge }
+            let sdir = if num `mod` 2 == 0 then -1 else 1
+            let periodDuration = respawnTime `div` 8
+            if duration o < periodDuration then do -- двигаться случайно
+              let newDir@(xdir, ydir) = if part `mod` 2 == 0 then (sdir, 0) else (0, sdir)
+              writeIORef state $ updateObject game $ o { duration = newDuration, direction = newDir, recharges = newRecharge }
+              else if duration obj < periodDuration*2 then do -- двигаться к игроку
+                let newDir@(xdir, ydir) = if part `mod` 2 == 0 then (sdir, 0) else (0, sdir)
+                writeIORef state $ updateObject game $ o { duration = newDuration, direction = newDir, recharges = newRecharge }
+                return ()
+                else do -- двигаться к штабу
+                  let newDir@(xdir, ydir) = if part `mod` 2 == 0 then (sdir, 0) else (0, sdir)
+                  writeIORef state $ updateObject game $ o { duration = newDuration, direction = newDir, recharges = newRecharge }
+                  return ()
+        let changeDirectionCommand = \o -> do
+            num <- randomIO :: IO Int
+            case num `mod` 3 of
+              0 -> changeDirection o
+              1 -> do -- rotate clockwise
+                let newDir = rotateClockwise $ direction o
+                writeIORef state $ updateObject game $ o { duration = newDuration, direction = newDir, recharges = newRecharge }
+              otherwise -> do -- rotate anticlockwise
+                let newDir = rotateAntiClockwise $ direction o
+                writeIORef state $ updateObject game $ o { duration = newDuration, direction = newDir, recharges = newRecharge }
+        let checkCollision = \o -> do
+            let coord@(x, y) = location o
+            num <- randomIO :: IO Int
+            if (x `mod` cellSize == 0) && (y `mod` cellSize == 0) && (num `mod` 8 == 0) then do
+              changeDirection o
+              else do
+                num <- randomIO :: IO Int
+                let dir@(xdir, ydir) = direction o
+                    newLocation@(nx, ny) = changeLocation coord (xdir*spd, ydir*spd)
+                    newObj = o { location = newLocation }
+                    collision = filter (\(_, e) -> isCollidingObject e && (getRect newObj) `isIntersect` (getRect e)) $ others
+                    flag = containsRect screenRect (getRect newObj) && null collision
+                if not flag && (num `mod` 16 == 0) then do
+                  if (x `mod` cellSize == 0) && (y `mod` cellSize == 0) then do -- invert direction
+                    writeIORef state $ updateObject game $ o { duration = newDuration, direction = (-xdir, -ydir), recharges = newRecharge }
+                    else do
+                      changeDirectionCommand o
+                  else do
+                    writeIORef state $ updateObject game $ o { duration = newDuration, recharges = newRecharge }
 
-createBullet :: (Int, Int) -> (Int, Int) -> Entity
-createBullet pos dir = Bullet {
+        checkCollision obj
+        game <- readIORef state
+        -- двигаем его
+        let Just obj = lookup id' $ objects game
+            dir@(xdir, ydir) = direction obj
+            newLocation@(nx, ny) = changeLocation (location obj) (xdir*spd, ydir*spd)
+            newObj = obj { duration = newDuration, location = newLocation, recharges = newRecharge }
+            collision = filter (\(_, e) -> isCollidingObject e && (getRect newObj) `isIntersect` (getRect e)) $ others
+            flag = containsRect screenRect (getRect newObj) && null collision
+        if flag then
+          writeIORef state $ updateObject game newObj
+          else
+            writeIORef state $ updateObject game $ obj { duration = newDuration, recharges = newRecharge }
+
+createBullet :: Int -> (Int, Int) -> (Int, Int) -> Entity
+createBullet sd pos dir = Bullet {
     eId = 0,
     layer = 3,
     location = pos,
     direction = dir,
     speed = 8,
+    side = sd,
     health = 1,
     size = (4, 4),
     sprite = ["bullet"],
-    onKeyboardCallback = (\_ key id' -> return ()),
+    onKeyboardCallback = (\_ _ _ -> return ()),
     onTimerCallback = timerCallback
   }
   where
@@ -181,6 +269,7 @@ createBullet pos dir = Bullet {
           let obj = fromJust idea
               objSize@(sx, sy) = size obj
               objCoord@(lx, ly) = location obj
+              bullSide = side obj
               spd = speed obj
               (xdir, ydir) = direction obj
               newLocation@(nx, ny) = changeLocation objCoord (xdir*spd, ydir*spd)
@@ -189,9 +278,8 @@ createBullet pos dir = Bullet {
           if not (containsRect screenRect newRect) then do
             writeIORef state $ deleteObject (registryObject game $ createBoom objCoord) obj
             else do
-              let otherObjs = filter (\(i, o) -> i /= id') $ objects game
-                  collision = filter (\(_, o) -> newRect `isIntersect` (getRect o)) otherObjs
-                  targets = filter (\(_, o) -> (isObstacle o && isImpassable o && not (isImmortal o)) || not (isObstacle o)) collision
+              let others = filter (\(i, o) -> i /= id' && (not (isTank o) || side o /= bullSide)) $ objects game
+                  targets = filter (\(_, o) -> isCollidingObject o && newRect `isIntersect` (getRect o)) others
               if not (null targets) then do
                 let checkStandart =
                       \(_, o) -> if isStandart o then o { health = 100500, sprite = ["fall_standart"] }
@@ -204,8 +292,8 @@ createBullet pos dir = Bullet {
                 when (null deleted) $ do
                   game <- readIORef state
                   writeIORef state $ registryObject game $ createBoom (location obj)
-                  else
-                    writeIORef state $ updateObject game newObj
+                else
+                  writeIORef state $ updateObject game newObj
 
 createObstacle :: (Int, Int) -> Entity
 createObstacle pos = Obstacle {
@@ -312,11 +400,12 @@ createStandart pos = Standart {
 createRespawnPoint :: (Int, Int) -> Entity
 createRespawnPoint pos = RespawnPoint {
     eId = 0,
-    time = 0,
     layer = 1,
+    health = 1,
+    duration = 0,
     size = (cellSize, cellSize),
     location = pos,
-    onKeyboardCallback = (\_ key obj -> return ()),
+    onKeyboardCallback = (\_ _ _ -> return ()),
     onTimerCallback = timerCallback
   }
   where
@@ -325,10 +414,10 @@ createRespawnPoint pos = RespawnPoint {
     let idea = lookup id' $ objects game
     when (isJust idea) $ do
       let obj = fromJust idea
-          oldTime = time obj
-      if oldTime >= 25000 then do
+          oldDuration = duration obj
+      if oldDuration >= respawnTime then do
         let newGame = registryObject game $ createSlowTank (location obj)
-        writeIORef state $ updateObject newGame $ obj { time = 0 }
+        writeIORef state $ updateObject newGame $ obj { duration = 0 }
         else
-          writeIORef state $ updateObject game $ obj { time = oldTime + 100 }
+          writeIORef state $ updateObject game $ obj { duration = oldDuration + 100 }
   timerCallback state _ obj = return ()

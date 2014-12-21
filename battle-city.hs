@@ -100,7 +100,7 @@ initSprites state = do
   gameover <- loadSprite "resources/gameover_301x199.pic"
 
   let sprites = [
-        ("test", sprite),
+        ("tank", sprite),
         ("armor", spriteArmor),
         ("grass", spriteGrass),
         ("water", spriteWater),
@@ -243,8 +243,10 @@ keyboard state ch _ = do
   let standart = snd $ head $ filter (isStandart . snd) $ objects game
   when (health standart == 1) $ do
     let key = event ch
-        oldKeys = delete key (keys game)
-    writeIORef state $ game { keys = oldKeys ++ [key] }
+    if key /= Fire then do
+      let oldKeys = delete MoveLeftward $ delete MoveRightward $ delete MoveForward $ delete MoveBackward $ (keys game)
+      writeIORef state $ game { keys = oldKeys ++ [key] }
+      else writeIORef state $ game { keys = (delete key (keys game)) ++ [key] }
 
 keyboardUp :: IORef GameState -> Char -> Position -> IO ()
 keyboardUp state ch _ = do
