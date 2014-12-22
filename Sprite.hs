@@ -49,9 +49,10 @@ loadSprite file = do
       [tex] <- genObjectNames 1
       texture Texture2D $= Enabled
       textureBinding Texture2D $= Just tex
+      -- textureFilter Texture2D $= ((Nearest, Just Nearest), Nearest)
+      textureFilter Texture2D $= ((Linear', Just Linear'), Linear')
       build2DMipmaps Texture2D RGBA' (fromIntegral width) (fromIntegral height)
         (PixelData RGBA UnsignedByte pixels)
-      textureFilter Texture2D $= ((Linear', Just Linear'), Linear')
       textureWrapMode Texture2D S $= (Repeated, ClampToEdge)
       textureWrapMode Texture2D T $= (Repeated, ClampToEdge)
       textureBinding Texture2D $= Nothing

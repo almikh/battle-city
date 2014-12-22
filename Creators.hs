@@ -18,7 +18,7 @@ screenHeight :: Int
 screenHeight = 32*13
 
 respawnTime :: Int
-respawnTime = 250000
+respawnTime = 25000
 
 loadMap :: FilePath -> IO TGrid
 loadMap file = do
@@ -52,13 +52,14 @@ notImmortalObject :: Entity -> Bool
 notImmortalObject o
   | isRespawnPoint o = False
   | isObstacle o = isDestroyed o
+  | isTank o = invulnerable o == 0
   | otherwise = True
 
 isCollidingObject :: Entity -> Bool
 isCollidingObject o
   | isRespawnPoint o = False
   | isBoom o = False
-  | isObstacle o = isImpassable o && not (isImmortal o)
+  | isObstacle o = isImpassable o -- && not (isImmortal o)
   | otherwise = True
 
 notEffect :: Entity -> Bool
@@ -66,6 +67,19 @@ notEffect o
   | isBoom o = False
   | isBullet o = False
   | otherwise = True
+
+checkInvulnerable :: Entity -> IO Entity
+checkInvulnerable o
+  | isTank o = do
+    if (invulnerable o == 1) then
+      return $ o { invulnerable = invulnerable o - 1, spritesEffects = [] }
+      else
+        if (invulnerable o > 1) then do
+          let effects = spritesEffects o
+              newSpritesEffects = if null effects then [] else (tail effects ++ [head effects])
+          return $ o { invulnerable = invulnerable o - 1, spritesEffects = newSpritesEffects }
+          else return o
+  | otherwise = return o
 
 createTank :: (Int, Int) -> Entity
 createTank pos = Tank {
@@ -76,6 +90,7 @@ createTank pos = Tank {
     lifetime = 0,
     duration = 0,
     side = 0,
+    invulnerable = 0,
     speed = cellSize `div` 16,
     size = (cellSize, cellSize),
     recharges = 0,
@@ -84,6 +99,7 @@ createTank pos = Tank {
     sprite = [ "star:0", "star:1", "star:2", "star:3" ],
     rechargeTime = 1000,
     targetSprites = [],
+    spritesEffects = [],
     onKeyboardCallback = (\_ _ _ -> return ()), -- никак не реагирует
     onTimerCallback = timerCallback
   }
@@ -218,8 +234,7 @@ createHero pos = tank {
         let newLocation@(nx, ny) = changeLocation (location obj) (xdir*spd, ydir*spd)
         let newObj = obj { location = newLocation, direction = newDir }
         let others = filter (\(i, o) -> i /= eId obj && notEffect o) $ objects game
-        let collision = filter (\(i, o) -> (getRect newObj) `isIntersect` (getRect o)) $ others
-        let obstacles = filter (\(i, o) -> (isObstacle o && isImpassable o) || isTank o) collision
+        let obstacles = filter (\(i, o) -> isCollidingObject o && (getRect newObj) `isIntersect` (getRect o)) others
         if null obstacles && (containsRect screenRect (getRect newObj)) then
           writeIORef state $ updateObject game newObj
           else writeIORef state $ updateObject game $ obj { direction = newDir }
@@ -228,9 +243,13 @@ createHero pos = tank {
       game <- readIORef state
       let idea = lookup id' $ objects game
       when (isJust idea) $ do
-        let obj = fromJust idea
-        if (lifetime obj == 6) then
-          writeIORef state $ updateObject game $ obj { lifetime = lifetime obj + 1, sprite = targetSprites obj }
+        obj <- checkInvulnerable $ fromJust idea
+
+        if (lifetime obj == 6) then do
+          let newLife = lifetime obj + 1
+              ts = targetSprites obj
+              se = ["field:0", "field:1"]
+          writeIORef state $ updateObject game $ obj { lifetime = newLife, sprite = ts, invulnerable = 24, spritesEffects = se }
           else do
             let (s:ss) = sprite obj
             writeIORef state $ updateObject game $ obj { lifetime = lifetime obj + 1, sprite = (ss ++ [s]) }
@@ -283,10 +302,10 @@ createBullet sd pos dir = Bullet {
     layer = 3,
     location = pos,
     direction = dir,
-    speed = 8,
+    speed = cellSize `div` 16,
     side = sd,
     health = 1,
-    size = (4, 4),
+    size = (5, 5),
     sprite = ["bullet"],
     onTimerCallback = timerCallback
   }
@@ -309,7 +328,7 @@ createBullet sd pos dir = Bullet {
             writeIORef state $ deleteObject (registryObject game $ createBoom objCoord) obj
             else do
               let others = filter (\(i, o) -> i /= id' && (not (isTank o) || side o /= bullSide)) $ objects game
-                  targets = filter (\(_, o) -> isCollidingObject o && newRect `isIntersect` (getRect o)) others
+                  targets = filter (\(_, o) -> isCollidingObject o && (not (isObstacle o) || not (isImmortal o)) && newRect `isIntersect` (getRect o)) others
               if not (null targets) then do
                 let checkStandart =
                       \(_, o) -> if isStandart o then o { health = 100500, sprite = ["fall_standart"] }
@@ -363,9 +382,20 @@ createWater pos = obst {
     isImpassable = True,
     isDestroyed = False,
     isImmortal = True,
-    sprite = ["water"]
+    sprite = ["water:0", "water:1"],
+    onTimerCallback = timerCallback
   }
-  where obst = createObstacle pos
+  where
+    obst = createObstacle pos
+    timerCallback state 600 id' = do -- анимация
+      game <- readIORef state
+      let idea = lookup id' $ objects game
+      when (isJust idea) $ do
+        let obj = fromJust idea
+        let (s:ss) = sprite obj
+        let newAnim = ss ++ [s]
+        writeIORef state $ updateObject game $ obj { sprite = newAnim }
+    timerCallback _ _ _ = return ()
 
 createArmor :: (Int, Int) -> Entity
 createArmor pos = obst {
@@ -437,12 +467,14 @@ createRespawnPoint pos = RespawnPoint {
   where
   timerCallback state 100 id' = do -- анимация
     game <- readIORef state
+    -- num <- randomIO :: IO Int
     let idea = lookup id' $ objects game
     when (isJust idea) $ do
       let obj = fromJust idea
           oldDuration = duration obj
-      if oldDuration >= respawnTime then do
-        let newGame = registryObject game $ createSlowTank (location obj)
+      if (enemyTanks game > 0) && (oldDuration >= respawnTime) then do
+        let oldEnemyTanks = enemyTanks game
+        let newGame = registryObject (game { enemyTanks = oldEnemyTanks - 1 }) $ createSlowTank (location obj)
         writeIORef state $ updateObject newGame $ obj { duration = 0 }
         else
           writeIORef state $ updateObject game $ obj { duration = oldDuration + 100 }

@@ -23,7 +23,7 @@ main = do
   state <- newIORef $ initGame
 
   window <- createWindow "Battle City"
-  windowSize $= Size (32*13 + 64 + 32*2) (32*13 + 32*2)
+  windowSize $= Size (32*13 + 64 + 32) (32*13 + 32*2)
   initialDisplayMode $= [ RGBAMode, DoubleBuffered, WithDepthBuffer ]
 
   blend $= Enabled
@@ -43,6 +43,7 @@ main = do
   addTimerCallback slowDt (timerDt state slowDt)
   addTimerCallback averageDt (timerDt state averageDt)
   addTimerCallback fastDt (timerDt state fastDt)
+  addTimerCallback 600 (timerDt state 600)
   addTimerCallback 12 (bulletsTimer state 12)
   addTimerCallback 100 (animTimer state 100)
   addTimerCallback 1000 (fpsTimer state 1000)
@@ -68,9 +69,12 @@ initMap state = do
           let obj = createGrass (i*ds, j*ds)
           writeIORef state $ registryObject game obj
         4 -> do
-          let obj = createStandart (i*ds, j*ds)
+          let obj = createWater (i*ds, j*ds)
           writeIORef state $ registryObject game obj
         5 -> do
+          let obj = createStandart (i*ds, j*ds)
+          writeIORef state $ registryObject game obj
+        6 -> do
           let obj = createRespawnPoint (i*ds, j*ds)
           writeIORef state $ registryObject game obj
         _ -> return ()
@@ -78,61 +82,44 @@ initMap state = do
 
 initSprites :: IORef GameState -> IO ()
 initSprites state = do
-  game <- readIORef state
-
-  spriteArmor <- loadSprite "resources/armor_8x8.pic"
-  spriteGrass <- loadSprite "resources/grass_8x8.pic"
-  spriteWater <- loadSprite "resources/water_8x8.pic"
-  spriteBrick <- loadSprite "resources/brick_8x8.pic"
-  spriteBullet <- loadSprite "resources/bullet_16x16.pic"
-  spriteStar0 <- loadSprite "resources/star0_16x16.pic"
-  spriteStar1 <- loadSprite "resources/star1_16x16.pic"
-  spriteStar2 <- loadSprite "resources/star2_16x16.pic"
-  spriteStar3 <- loadSprite "resources/star3_16x16.pic"
-  boom0 <- loadSprite "resources/boom0_16x16.pic"
-  boom1 <- loadSprite "resources/boom1_16x16.pic"
-  boom2 <- loadSprite "resources/boom2_16x16.pic"
-  bigboom0 <- loadSprite "resources/bigboom0_32x32.pic"
-  bigboom1 <- loadSprite "resources/bigboom1_32x32.pic"
-  fallenStandart <- loadSprite "resources/fallenstandart_16x16.pic"
-  standart <- loadSprite "resources/standart_16x16.pic"
-  gameover <- loadSprite "resources/gameover_301x199.pic"
-  hero0 <- loadSprite "resources/goldtank00_15x15.pic"
-  hero1 <- loadSprite "resources/goldtank01_15x15.pic"
-  average0 <- loadSprite "resources/avtank00_15x15.pic"
-  average1 <- loadSprite "resources/avtank01_15x15.pic"
-  slow0 <- loadSprite "resources/slowtank00_15x15.pic"
-  slow1 <- loadSprite "resources/slowtank01_15x15.pic"
-  fast0 <- loadSprite "resources/fasttank00_15x15.pic"
-  fast1 <- loadSprite "resources/fasttank01_15x15.pic"
-
   let sprites = [
-        ("hero0", hero0),
-        ("hero1", hero1),
-        ("average0", average0),
-        ("average1", average1),
-        ("slow0", slow0),
-        ("slow1", slow1),
-        ("fast0", fast0),
-        ("fast1", fast1),
-        ("armor", spriteArmor),
-        ("grass", spriteGrass),
-        ("water", spriteWater),
-        ("brick", spriteBrick),
-        ("bullet", spriteBullet),
-        ("star:0", spriteStar0),
-        ("star:1", spriteStar1),
-        ("star:2", spriteStar2),
-        ("star:3", spriteStar3),
-        ("boom:0", boom0),
-        ("boom:1", boom1),
-        ("boom:2", boom2),
-        ("bigboom:0", bigboom0),
-        ("bigboom:1", bigboom1),
-        ("standart", standart),
-        ("fall_standart", fallenStandart),
-        ("gameover", gameover) ]
-  writeIORef state $ registrySprites game sprites
+        ("field:0", "resources/field0_16x16.pic"),
+        ("field:1", "resources/field1_16x16.pic"),
+        ("pause", "resources/pause_39x8.pic"),
+        ("icon", "resources/tankicon_16x16.pic"),
+        ("bullet", "resources/bullet_5x5.pic"),
+        ("armor", "resources/armor_8x8.pic"),
+        ("grass", "resources/grass_8x8.pic"),
+        ("water:0", "resources/water0_8x8.pic"),
+        ("water:1", "resources/water1_8x8.pic"),
+        ("water:2", "resources/water2_8x8.pic"),
+        ("brick", "resources/brick_8x8.pic"),
+        ("star:0", "resources/star0_16x16.pic"),
+        ("star:1", "resources/star1_16x16.pic"),
+        ("star:2", "resources/star2_16x16.pic"),
+        ("star:3", "resources/star3_16x16.pic"),
+        ("boom:0", "resources/boom0_16x16.pic"),
+        ("boom:1", "resources/boom1_16x16.pic"),
+        ("boom:2", "resources/boom2_16x16.pic"),
+        ("bigboom:0", "resources/bigboom0_32x32.pic"),
+        ("bigboom:1", "resources/bigboom1_32x32.pic"),
+        ("fall_standart", "resources/fallenstandart_16x16.pic"),
+        ("standart", "resources/standart_16x16.pic"),
+        ("hero0", "resources/goldtank00_15x15.pic"),
+        ("hero1", "resources/goldtank01_15x15.pic"),
+        ("gameover", "resources/gameover_301x199.pic"),
+        ("average0", "resources/avtank00_15x15.pic"),
+        ("average1", "resources/avtank01_15x15.pic"),
+        ("slow0", "resources/slowtank00_15x15.pic"),
+        ("slow1", "resources/slowtank01_15x15.pic"),
+        ("fast0", "resources/fasttank00_15x15.pic"),
+        ("fast1", "resources/fasttank01_15x15.pic") ]
+
+  forM_ sprites $ \(name, file) -> do
+    game <- readIORef state
+    sprite <- loadSprite file
+    writeIORef state $ registrySprite game name sprite
+
   putStrLn "Sprites loaded..."
 
 initObjects :: IORef GameState -> IO ()
@@ -148,10 +135,16 @@ initObjects state = do
 
 renderObject :: GameState -> Entity -> IO ()
 renderObject game obj
-  | isTank obj = do
-    let Just sprite = lookup (getSprite obj) (sprites game)
-        dir = dir2rot $ direction obj
+  | isBullet obj = do
+    let dir = dir2rot $ direction obj
     drawSpriteEx dir sprite rect
+  | isTank obj = do
+    let dir = dir2rot $ direction obj
+    drawSpriteEx dir sprite rect
+    let effects = spritesEffects obj
+    when (not (null effects)) $ do -- рисуем эффекты
+      let Just sprite = lookup (head (spritesEffects obj)) $ sprites game
+      drawSprite sprite rect
   | isRespawnPoint obj = do
     polygonMode $= (Line, Line)
     currentColor $= Color4 1.0 1.0 1.0 1.0
@@ -162,11 +155,11 @@ renderObject game obj
       vertex $ Vertex2 (i2f (x+w+borderSize)) (i2f (y+borderSize))
     polygonMode $= (Fill, Fill)
   | otherwise = do
-    let Just sprite = lookup (getSprite obj) (sprites game)
     drawSprite sprite rect
     where
       objRect@((x, y), (w, h)) = getRect obj
       rect = ((x+borderSize, y+borderSize), (w, h))
+      Just sprite = lookup (getSprite obj) (sprites game)
 
 resize :: Size -> IO ()
 resize s@(Size w h) = do
@@ -196,7 +189,7 @@ display state = do
   mapM_ (\(_, o) -> renderObject game o) $ sortBy sortFunc $ objects game
 
   let standart = snd $ head $ filter (isStandart . snd) $ objects game
-  when (health standart > 1) $ do
+  when (health standart > 1) $ do -- game over
     currentColor $= Color4 0.0 0.0 0.0 0.7
     renderPrimitive Quads $ do
       vertex $ Vertex3 (i2f borderSize) (i2f borderSize) 0
@@ -204,19 +197,45 @@ display state = do
       vertex $ Vertex3 (i2f (borderSize+screenWidth)) (i2f (borderSize+screenHeight)) 0
       vertex $ Vertex3 (i2f (borderSize+screenWidth)) (i2f borderSize) 0
     let Just sprite@(Sprite w h _) = lookup "gameover" $ sprites game
-    let rect = (((screenWidth-w) `div` 2, (screenHeight-h) `div` 2), (w, h))
+    let rect = ((borderSize + ((screenWidth-w) `div` 2), borderSize + ((screenHeight-h) `div` 2)), (w, h))
+    currentColor $= Color4 1.0 1.0 1.0 1.0
+    drawSprite sprite rect
+
+  when (pause game) $ do -- пауза
+    currentColor $= Color4 0.0 0.0 0.0 0.8
+    renderPrimitive Quads $ do
+      vertex $ Vertex3 (i2f borderSize) (i2f borderSize) 0
+      vertex $ Vertex3 (i2f borderSize) (i2f (borderSize+screenHeight)) 0
+      vertex $ Vertex3 (i2f (borderSize+screenWidth)) (i2f (borderSize+screenHeight)) 0
+      vertex $ Vertex3 (i2f (borderSize+screenWidth)) (i2f borderSize) 0
+    let Just sprite@(Sprite w h _) = lookup "pause" $ sprites game
+    let rect = ((borderSize + ((screenWidth-w) `div` 2), borderSize + ((screenHeight-h) `div` 2)), (w, h))
     currentColor $= Color4 1.0 1.0 1.0 1.0
     drawSprite sprite rect
   --preservingMatrix $ do
   --  translate $ Vector3 (i2f 100) 0.0 0.0
   --  renderString Fixed8By13 . ("FPS: " ++) $ show (fps game)
   -- putStrLn $ ("FPS: " ++) $ show (fps game)
+  displayTanksIcon state
   flush
+
+displayTanksIcon :: IORef GameState -> IO ()
+displayTanksIcon state = do
+  game <- readIORef state
+  let enemies = enemyTanks game
+      Just sprite = lookup "icon" (sprites game)
+      x = screenWidth + 32 + 16
+      y = screenHeight - 16
+
+  forM_ [0 .. (enemies-1)] $ \i -> do
+    let dx = i `mod` 2
+        dy = i `div` 2
+    drawSprite sprite ((x + dx*16 -1+dx*2, y - dy*17), (16, 16))
+  return ()
 
 animTimer :: IORef GameState -> Int -> IO ()
 animTimer state elapsed = do
   game <- readIORef state
-
   mapM_ (\(i, o) -> (onTimerCallback o) state elapsed i) $ objects game
   addTimerCallback elapsed (animTimer state elapsed)
   return ()
@@ -224,14 +243,16 @@ animTimer state elapsed = do
 timerDt :: IORef GameState -> Int -> IO ()
 timerDt state elapsed = do
   game <- readIORef state
-  mapM_ (\(i, o) -> (onTimerCallback o) state elapsed i) $ objects game
+  when (not (pause game)) $ do
+    mapM_ (\(i, o) -> (onTimerCallback o) state elapsed i) $ objects game
   addTimerCallback elapsed (timerDt state elapsed)
   return ()
 
 bulletsTimer :: IORef GameState -> Int -> IO ()
 bulletsTimer state elapsed = do
   game <- readIORef state
-  mapM_ (\(i, o) -> (onTimerCallback o) state elapsed i) $ filter (isBullet . snd) $ objects game
+  when (not (pause game)) $ do
+    mapM_ (\(i, o) -> (onTimerCallback o) state elapsed i) $ filter (isBullet . snd) $ objects game
   addTimerCallback elapsed (bulletsTimer state elapsed)
   return ()
 
@@ -250,18 +271,24 @@ idle state = do
 keyboard :: IORef GameState -> Char -> Position -> IO ()
 keyboard state ch _ = do
   game <- readIORef state
-
-  let standart = snd $ head $ filter (isStandart . snd) $ objects game
-  when (health standart == 1) $ do
-    let key = event ch
-    if key /= Fire then do
-      let oldKeys = delete MoveLeftward $ delete MoveRightward $ delete MoveForward $ delete MoveBackward $ (keys game)
-      writeIORef state $ game { keys = oldKeys ++ [key] }
-      else writeIORef state $ game { keys = (delete key (keys game)) ++ [key] }
+  let key = event ch
+  when (not (pause game)) $ do
+    let standart = snd $ head $ filter (isStandart . snd) $ objects game
+    when (health standart == 1) $ do
+      if key /= Fire then do
+        let oldKeys = delete MoveLeftward $ delete MoveRightward $ delete MoveForward $ delete MoveBackward $ (keys game)
+        writeIORef state $ game { keys = oldKeys ++ [key] }
+        else writeIORef state $ game { keys = (delete key (keys game)) ++ [key] }
+  return ()
 
 keyboardUp :: IORef GameState -> Char -> Position -> IO ()
 keyboardUp state ch _ = do
   game <- readIORef state
   let key = event ch
-  writeIORef state $ game { keys = delete key (keys game) }
+  let standart = snd $ head $ filter (isStandart . snd) $ objects game
+  when (health standart == 1) $ do
+    if key == Pause then
+      writeIORef state $ game { pause = not (pause game) }
+      else
+        writeIORef state $ game { keys = delete key (keys game) }
   return ()

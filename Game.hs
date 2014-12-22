@@ -39,9 +39,11 @@ data GameState =
     fps :: Int,
     maxId :: Int,
     counter :: Int,
+    enemyTanks :: Int,
     objects :: [(ID, Entity)],
     sprites :: [(String, Sprite)],
-    keys :: [KeyboardEvent] -- нажатые в данный момент клавиши
+    keys :: [KeyboardEvent], -- нажатые в данный момент клавиши
+    pause :: Bool
   }
 
 data Entity =
@@ -69,10 +71,12 @@ data Entity =
     lifetime :: Int,
     duration :: Int,
     recharges :: Int,
+    invulnerable :: Int,
     sprite :: TAnimation,
     rechargeTime :: Int,
     targetDt :: Int,
     targetSprites :: TAnimation,
+    spritesEffects :: TAnimation,
     onKeyboardCallback :: TKeyboardCallback,
     onTimerCallback :: TTimerCallback
   } |
@@ -124,7 +128,7 @@ registrySprites :: GameState -> [(String, Sprite)] -> GameState
 registrySprites state sprs = state { sprites = sprs ++ (sprites state) }
 
 initGame :: GameState
-initGame = GameState 0 1 0 [] [] []
+initGame = GameState 0 1 0 18 [] [] [] False
 
 updateObject :: GameState -> Entity -> GameState
 updateObject state obj = state { objects = (updateObject' $ objects state) }
@@ -229,7 +233,7 @@ changeLocation :: TLocation -> (Int, Int) -> TLocation
 changeLocation (x, y) (dx, dy) = (x+dx, y+dy)
 
 isTank :: Entity -> Bool
-isTank (Tank _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _) = True
+isTank (Tank _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _) = True
 isTank _ = False
 
 isBullet :: Entity -> Bool
