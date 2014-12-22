@@ -13,13 +13,13 @@ screenRect :: ((Int, Int), (Int, Int))
 screenRect = ((0, 0), (32*13, 32*13))
 
 slowDt :: Int
-slowDt = 50
+slowDt = 36
 
 averageDt :: Int
-averageDt = 33
+averageDt = 24
 
 fastDt :: Int
-fastDt = 25
+fastDt = 12
 
 type TLocation = (Int, Int)
 type TSize = (Int, Int)
@@ -55,7 +55,6 @@ data Entity =
     size :: TSize,
     health :: Int,
     sprite :: TAnimation,
-    onKeyboardCallback :: TKeyboardCallback,
     onTimerCallback :: TTimerCallback
   } |
   Tank {
@@ -72,6 +71,8 @@ data Entity =
     recharges :: Int,
     sprite :: TAnimation,
     rechargeTime :: Int,
+    targetDt :: Int,
+    targetSprites :: TAnimation,
     onKeyboardCallback :: TKeyboardCallback,
     onTimerCallback :: TTimerCallback
   } |
@@ -85,7 +86,6 @@ data Entity =
     size :: TSize,
     health :: Int,
     sprite :: TAnimation,
-    onKeyboardCallback :: TKeyboardCallback,
     onTimerCallback :: TTimerCallback
   } |
   Boom {
@@ -95,7 +95,6 @@ data Entity =
     location :: TLocation,
     health :: Int,
     sprite :: TAnimation,
-    onKeyboardCallback :: TKeyboardCallback,
     onTimerCallback :: TTimerCallback
   } |
   Standart { -- знамя
@@ -105,7 +104,6 @@ data Entity =
     location :: TLocation,
     health :: Int,
     sprite :: TAnimation,
-    onKeyboardCallback :: TKeyboardCallback,
     onTimerCallback :: TTimerCallback
   } |
   RespawnPoint { -- отсюда будут появляться вражеские танки
@@ -115,7 +113,6 @@ data Entity =
     duration :: Int,
     size :: TLocation,
     location :: TLocation,
-    onKeyboardCallback :: TKeyboardCallback,
     onTimerCallback :: TTimerCallback
   }
 
@@ -232,29 +229,29 @@ changeLocation :: TLocation -> (Int, Int) -> TLocation
 changeLocation (x, y) (dx, dy) = (x+dx, y+dy)
 
 isTank :: Entity -> Bool
-isTank (Tank _ _ _ _ _ _ _ _ _ _ _ _ _ _ _) = True
+isTank (Tank _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _) = True
 isTank _ = False
 
 isBullet :: Entity -> Bool
-isBullet (Bullet _ _ _ _ _ _ _ _ _ _ _) = True
+isBullet (Bullet _ _ _ _ _ _ _ _ _ _) = True
 isBullet _ = False
 
 isObstacle :: Entity -> Bool
-isObstacle (Obstacle _ _ _ _ _ _ _ _ _ _ _) = True
+isObstacle (Obstacle _ _ _ _ _ _ _ _ _ _) = True
 isObstacle _ = False
 
 isBoom :: Entity -> Bool
-isBoom (Boom _ _ _ _ _ _ _ _) = True
+isBoom (Boom _ _ _ _ _ _ _) = True
 isBoom _ = False
 
 isStandart :: Entity -> Bool
-isStandart (Standart _ _ _ _ _ _ _ _) = True
+isStandart (Standart _ _ _ _ _ _ _) = True
 isStandart _ = False
 
 isRespawnPoint :: Entity -> Bool
-isRespawnPoint (RespawnPoint _ _ _ _ _ _ _ _) = True
+isRespawnPoint (RespawnPoint _ _ _ _ _ _ _) = True
 isRespawnPoint _ = False
 
 isImpassableObj :: Entity -> Bool
-isImpassableObj (Obstacle _ _ _ is _ _ _ _ _ _ _) = is
+isImpassableObj (Obstacle _ _ _ is _ _ _ _ _ _) = is
 isImpassableObj _ = True

@@ -80,75 +80,11 @@ createTank pos = Tank {
     size = (cellSize, cellSize),
     recharges = 0,
     health = 1,
+    targetDt = 0,
     sprite = [ "star:0", "star:1", "star:2", "star:3" ],
     rechargeTime = 1000,
+    targetSprites = [],
     onKeyboardCallback = (\_ _ _ -> return ()), -- никак не реагирует
-    onTimerCallback = (\_ _ _ -> return ())
-  }
-
-createHero :: (Int, Int) -> Entity
-createHero pos = tank {
-    side = 1,
-    onKeyboardCallback = keyboardCallback,
-    onTimerCallback = timerCallback
-  }
-  where
-    tank = createTank pos
-    keyboardCallback _ No _ = return ()
-    keyboardCallback state Fire id' = do
-      game <- readIORef state
-      let idea = lookup id' $ objects game
-      when (isJust idea && (lifetime (fromJust idea) >= 3)) $ do
-        -- Во время этого шага таймера объекты могут измениться внутри forM_, поэтму пришлось обращаться к ним через индексы
-        let obj = fromJust idea
-        when (recharges obj <= 0) $ do
-          let updState = updateObject game $ obj { recharges = rechargeTime obj }
-          let bulletDir@(dx, dy) = direction obj
-          let bullet = createBullet 1 (0, 0) bulletDir
-          let (x, y) = location obj
-          let (ow, oh) = size obj
-          let (bw, bh) = size bullet
-          let bulletPos = (x + ((ow-bw) `div` 2) + (dx*ow) `div` 2, y + ((oh-bh) `div` 2) + (dy*oh) `div` 2)
-          writeIORef state $ registryObject updState $ bullet { location = bulletPos }
-    keyboardCallback state key id' = do
-      game <- readIORef state
-      let idea = lookup id' $ objects game
-      when (isJust idea && (lifetime (fromJust idea) >= 3)) $ do
-        let obj = fromJust idea
-        let spd = speed obj
-        let newDir@(xdir, ydir) = getDir key
-        let newLocation@(nx, ny) = changeLocation (location obj) (xdir*spd, ydir*spd)
-        let newObj = obj { location = newLocation, direction = newDir }
-        let others = filter (\(i, o) -> i /= eId obj && notEffect o) $ objects game
-        let collision = filter (\(i, o) -> (getRect newObj) `isIntersect` (getRect o)) $ others
-        let obstacles = filter (\(i, o) -> (isObstacle o && isImpassable o) || isTank o) collision
-        if null obstacles && (containsRect screenRect (getRect newObj)) then
-          writeIORef state $ updateObject game newObj
-          else writeIORef state $ updateObject game $ obj { direction = newDir }
-
-    timerCallback state 100 id' = do -- анимация
-      game <- readIORef state
-      let idea = lookup id' $ objects game
-      when (isJust idea) $ do
-        let obj = fromJust idea
-        if (lifetime obj == 6) then
-          writeIORef state $ updateObject game $ obj { lifetime = lifetime obj + 1, sprite = ["tank"] }
-          else do
-            let (s:ss) = sprite obj
-            writeIORef state $ updateObject game $ obj { lifetime = lifetime obj + 1, sprite = (ss ++ [s]) }
-    timerCallback state dt id' = do
-      when (dt==averageDt) $ do
-        game <- readIORef state
-        let idea = lookup id' $ objects game
-        when (isJust idea && (lifetime (fromJust idea) >= 6)) $ do
-          let obj = fromJust idea
-          let newRecharge = (\r -> if r /= 0 then r - 25 else r) $ recharges obj
-          writeIORef state $ updateObject game $ obj { recharges = newRecharge }
-
-createSlowTank :: (Int, Int) -> Entity
-createSlowTank pos = tank {
-    side = 0,
-    onKeyboardCallback = (\_ _ _ -> return ()),
     onTimerCallback = timerCallback
   }
   where
@@ -159,14 +95,14 @@ createSlowTank pos = tank {
       when (isJust idea) $ do
         let obj = fromJust idea
         if (lifetime obj == 6) then
-          writeIORef state $ updateObject game $ obj { lifetime = lifetime obj + 1, sprite = ["tank"] }
+          writeIORef state $ updateObject game $ obj { lifetime = lifetime obj + 1, sprite = targetSprites obj }
           else do
             let (s:ss) = sprite obj
             writeIORef state $ updateObject game $ obj { lifetime = lifetime obj + 1, sprite = (ss ++ [s]) }
     timerCallback state dt id' = do
       game <- readIORef state
       let idea = lookup id' $ objects game
-      when (dt==slowDt && isJust idea && (lifetime (fromJust idea) >= 6)) $ do
+      when (isJust idea && (lifetime (fromJust idea) >= 6) && (dt == targetDt (fromJust idea))) $ do
         let obj = fromJust idea
         -- проверка выстрела
         num <- randomIO :: IO Int
@@ -185,7 +121,7 @@ createSlowTank pos = tank {
         let spd = speed obj
         let others = filter (\(i, o) -> i /= id' && notEffect o) $ objects game
         let newDuration = duration obj + dt
-        let newRecharge = (\r -> if r /= 0 then r - 25 else r) $ recharges obj
+        let newRecharge = (\r -> if r /= 0 then r - dt else r) $ recharges obj
         let changeDirection = \o -> do
             num <- randomIO :: IO Int
             part <- randomIO :: IO Int
@@ -246,6 +182,101 @@ createSlowTank pos = tank {
           else
             writeIORef state $ updateObject game $ obj { duration = newDuration, recharges = newRecharge }
 
+createHero :: (Int, Int) -> Entity
+createHero pos = tank {
+    side = 1,
+    targetDt = averageDt,
+    targetSprites = ["hero0", "hero1"],
+    onKeyboardCallback = keyboardCallback,
+    onTimerCallback = timerCallback
+  }
+  where
+    tank = createTank pos
+    keyboardCallback _ No _ = return ()
+    keyboardCallback state Fire id' = do
+      game <- readIORef state
+      let idea = lookup id' $ objects game
+      when (isJust idea && (lifetime (fromJust idea) >= 3)) $ do
+        -- Во время этого шага таймера объекты могут измениться внутри forM_, поэтму пришлось обращаться к ним через индексы
+        let obj = fromJust idea
+        when (recharges obj <= 0) $ do
+          let updState = updateObject game $ obj { recharges = rechargeTime obj }
+          let bulletDir@(dx, dy) = direction obj
+          let bullet = createBullet 1 (0, 0) bulletDir
+          let (x, y) = location obj
+          let (ow, oh) = size obj
+          let (bw, bh) = size bullet
+          let bulletPos = (x + ((ow-bw) `div` 2) + (dx*ow) `div` 2, y + ((oh-bh) `div` 2) + (dy*oh) `div` 2)
+          writeIORef state $ registryObject updState $ bullet { location = bulletPos }
+    keyboardCallback state key id' = do
+      game <- readIORef state
+      let idea = lookup id' $ objects game
+      when (isJust idea && (lifetime (fromJust idea) >= 3)) $ do
+        let obj = fromJust idea
+        let spd = speed obj
+        let newDir@(xdir, ydir) = getDir key
+        let newLocation@(nx, ny) = changeLocation (location obj) (xdir*spd, ydir*spd)
+        let newObj = obj { location = newLocation, direction = newDir }
+        let others = filter (\(i, o) -> i /= eId obj && notEffect o) $ objects game
+        let collision = filter (\(i, o) -> (getRect newObj) `isIntersect` (getRect o)) $ others
+        let obstacles = filter (\(i, o) -> (isObstacle o && isImpassable o) || isTank o) collision
+        if null obstacles && (containsRect screenRect (getRect newObj)) then
+          writeIORef state $ updateObject game newObj
+          else writeIORef state $ updateObject game $ obj { direction = newDir }
+
+    timerCallback state 100 id' = do -- анимация
+      game <- readIORef state
+      let idea = lookup id' $ objects game
+      when (isJust idea) $ do
+        let obj = fromJust idea
+        if (lifetime obj == 6) then
+          writeIORef state $ updateObject game $ obj { lifetime = lifetime obj + 1, sprite = targetSprites obj }
+          else do
+            let (s:ss) = sprite obj
+            writeIORef state $ updateObject game $ obj { lifetime = lifetime obj + 1, sprite = (ss ++ [s]) }
+    timerCallback state dt id' = do
+      game <- readIORef state
+      let idea = lookup id' $ objects game
+      when (isJust idea && (lifetime (fromJust idea) >= 6) && (dt == targetDt (fromJust idea))) $ do
+        forM_ (keys game) $ \key -> do -- обработаем события клавиатуры
+          (onKeyboardCallback (fromJust idea)) state key id'
+
+        game <- readIORef state
+        let Just obj = lookup id' $ objects game
+        let newRecharge = (\r -> if r /= 0 then r - dt else r) $ recharges obj
+        writeIORef state $ updateObject game $ obj { recharges = newRecharge }
+
+createSlowTank :: (Int, Int) -> Entity
+createSlowTank pos = tank {
+    side = 0,
+    health = 4,
+    targetDt = slowDt,
+    targetSprites = ["slow0", "slow1"],
+    onKeyboardCallback = (\_ _ _ -> return ())
+  }
+  where
+    tank = createTank pos
+
+createAvTank :: (Int, Int) -> Entity
+createAvTank pos = tank {
+    side = 0,
+    targetDt = averageDt,
+    targetSprites = ["average0", "average1"],
+    onKeyboardCallback = (\_ _ _ -> return ())
+  }
+  where
+    tank = createTank pos
+
+createFastTank :: (Int, Int) -> Entity
+createFastTank pos = tank {
+    side = 0,
+    targetDt = fastDt,
+    targetSprites = ["fast0", "fast1"],
+    onKeyboardCallback = (\_ _ _ -> return ())
+  }
+  where
+    tank = createTank pos
+
 createBullet :: Int -> (Int, Int) -> (Int, Int) -> Entity
 createBullet sd pos dir = Bullet {
     eId = 0,
@@ -257,7 +288,6 @@ createBullet sd pos dir = Bullet {
     health = 1,
     size = (4, 4),
     sprite = ["bullet"],
-    onKeyboardCallback = (\_ _ _ -> return ()),
     onTimerCallback = timerCallback
   }
   where
@@ -306,7 +336,6 @@ createObstacle pos = Obstacle {
     size = (cellSize `div` 2, cellSize `div` 2),
     health = 1,
     sprite = [""],
-    onKeyboardCallback = (\_ key obj -> return ()),
     onTimerCallback = timerCallback
   }
   where
@@ -362,7 +391,6 @@ createBoom pos@(x, y) = Boom {
     location = (x, y),
     health = 100500,
     sprite = ["boom:0", "boom:1", "boom:2"],
-    onKeyboardCallback = (\_ key obj -> return ()),
     onTimerCallback = timerCallback
   }
   where
@@ -393,7 +421,6 @@ createStandart pos = Standart {
     location = pos,
     health = 1,
     sprite = ["standart", "fall_standart"],
-    onKeyboardCallback = (\_ key obj -> return ()),
     onTimerCallback = (\_ _ obj -> return ())
   }
 
@@ -405,7 +432,6 @@ createRespawnPoint pos = RespawnPoint {
     duration = 0,
     size = (cellSize, cellSize),
     location = pos,
-    onKeyboardCallback = (\_ _ _ -> return ()),
     onTimerCallback = timerCallback
   }
   where

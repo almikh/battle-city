@@ -80,7 +80,6 @@ initSprites :: IORef GameState -> IO ()
 initSprites state = do
   game <- readIORef state
 
-  sprite <- loadSprite "resources/tank_15x15.pic" --"resources/tank_15x15.pic"
   spriteArmor <- loadSprite "resources/armor_8x8.pic"
   spriteGrass <- loadSprite "resources/grass_8x8.pic"
   spriteWater <- loadSprite "resources/water_8x8.pic"
@@ -98,9 +97,24 @@ initSprites state = do
   fallenStandart <- loadSprite "resources/fallenstandart_16x16.pic"
   standart <- loadSprite "resources/standart_16x16.pic"
   gameover <- loadSprite "resources/gameover_301x199.pic"
+  hero0 <- loadSprite "resources/goldtank00_15x15.pic"
+  hero1 <- loadSprite "resources/goldtank01_15x15.pic"
+  average0 <- loadSprite "resources/avtank00_15x15.pic"
+  average1 <- loadSprite "resources/avtank01_15x15.pic"
+  slow0 <- loadSprite "resources/slowtank00_15x15.pic"
+  slow1 <- loadSprite "resources/slowtank01_15x15.pic"
+  fast0 <- loadSprite "resources/fasttank00_15x15.pic"
+  fast1 <- loadSprite "resources/fasttank01_15x15.pic"
 
   let sprites = [
-        ("tank", sprite),
+        ("hero0", hero0),
+        ("hero1", hero1),
+        ("average0", average0),
+        ("average1", average1),
+        ("slow0", slow0),
+        ("slow1", slow1),
+        ("fast0", fast0),
+        ("fast1", fast1),
         ("armor", spriteArmor),
         ("grass", spriteGrass),
         ("water", spriteWater),
@@ -126,7 +140,9 @@ initObjects state = do
   game <- readIORef state
   let objs = [
         createHero (4*cellSize, 0*cellSize),
-        createSlowTank (0*cellSize, 12*cellSize) ]
+        createSlowTank (0*cellSize, 12*cellSize),
+        createFastTank (12*cellSize, 12*cellSize),
+        createAvTank (6*cellSize, 12*cellSize) ]
   writeIORef state $ registryObjects game objs
   putStrLn "Objects loaded..."
 
@@ -207,11 +223,6 @@ animTimer state elapsed = do
 
 timerDt :: IORef GameState -> Int -> IO ()
 timerDt state elapsed = do
-  game <- readIORef state
-  forM_ (keys game) $ \key -> do
-    game <- readIORef state
-    mapM_ (\(i, o) -> (onKeyboardCallback o) state key i) $ objects game
-
   game <- readIORef state
   mapM_ (\(i, o) -> (onTimerCallback o) state elapsed i) $ objects game
   addTimerCallback elapsed (timerDt state elapsed)
