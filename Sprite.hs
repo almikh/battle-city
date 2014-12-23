@@ -1,4 +1,4 @@
-{-# LANGUAGE TupleSections, TypeOperators #-}
+{-# LANGUAGE TupleSections #-}
 module Sprite where
 
 import Control.Monad

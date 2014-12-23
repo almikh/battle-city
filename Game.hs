@@ -9,6 +9,7 @@ import Data.IORef
 import KeyEvent
 import Sprite
 
+
 screenRect :: ((Int, Int), (Int, Int))
 screenRect = ((0, 0), (32*13, 32*13))
 

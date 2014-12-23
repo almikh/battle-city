@@ -1,3 +1,4 @@
+{-# LANGUAGE TupleSections #-}
 module Creators where
 
 import Game
@@ -8,6 +9,7 @@ import Data.IORef
 import Data.List
 import Data.Maybe
 import KeyEvent
+import PathFinder
 
 steps = 12
 cellSize = 32
@@ -81,6 +83,25 @@ checkInvulnerable o
           else return o
   | otherwise = return o
 
+createAccessGrid :: GameState -> TGrid
+createAccessGrid game = foldl foldFunc (newGrid 13 13) $ map snd obstacles
+  where
+    obstacles = filter (\(i, o) -> isCollidingObject o && notEffect o) $ objects game
+    foldFunc grid o = let (x, y) = location o in grid // [((x `div` cellSize, y `div` cellSize), -1)]
+
+printGrid :: TGrid -> IO ()
+printGrid grid = do
+  putStrLn "==="
+  let h = gridHeight grid
+  forM_ [0 .. (gridHeight grid)] $ \j -> do
+    forM_ [0 .. (gridWidth grid)] $ \i -> do
+      if grid ! (i, h-j) < 0 then
+        putStr $ " " ++ show (grid ! (i, h-j))
+        else
+          putStr $ "  " ++ show (grid ! (i, h-j))
+    putStrLn ""
+  return ()
+
 createTank :: (Int, Int) -> Entity
 createTank pos = Tank {
     eId = 0,
@@ -141,19 +162,31 @@ createTank pos = Tank {
         let changeDirection = \o -> do
             num <- randomIO :: IO Int
             part <- randomIO :: IO Int
-            let sdir = if num `mod` 2 == 0 then -1 else 1
             let periodDuration = respawnTime `div` 8
             if duration o < periodDuration then do -- двигаться случайно
-              let newDir@(xdir, ydir) = if part `mod` 2 == 0 then (sdir, 0) else (0, sdir)
+              let sdir = if num `mod` 2 == 0 then -1 else 1
+                  newDir@(xdir, ydir) = if part `mod` 2 == 0 then (sdir, 0) else (0, sdir)
               writeIORef state $ updateObject game $ o { duration = newDuration, direction = newDir, recharges = newRecharge }
-              else if duration obj < periodDuration*2 then do -- двигаться к игроку
-                let newDir@(xdir, ydir) = if part `mod` 2 == 0 then (sdir, 0) else (0, sdir)
-                writeIORef state $ updateObject game $ o { duration = newDuration, direction = newDir, recharges = newRecharge }
-                return ()
-                else do -- двигаться к штабу
-                  let newDir@(xdir, ydir) = if part `mod` 2 == 0 then (sdir, 0) else (0, sdir)
-                  writeIORef state $ updateObject game $ o { duration = newDuration, direction = newDir, recharges = newRecharge }
-                  return ()
+              else do --if duration obj < periodDuration*2 then do -- двигаться к игроку
+                let tempGrid = createAccessGrid game
+                    targets = filter (\(i, o) -> isTank o && side o == 1) $ objects game
+                    (x, y) = location obj
+                when (not $ null targets) $ do
+                  let target = snd $ head targets
+                      (tx, ty) = location target
+                      thisCell@(cx, cy) = (x `div` cellSize, y `div` cellSize)
+                      targetCell = (tx `div` cellSize, ty `div` cellSize)
+                      accessGrid = tempGrid // [(targetCell, 0), (thisCell, 0)]
+                      path = findPath accessGrid thisCell targetCell
+                  when (length path > 1) $ do
+                    let nextCell@(nx, ny) = head $ tail path
+                        newDir@(xdir, ydir) = (nx - cx, ny - cy)
+
+                    writeIORef state $ updateObject game $ o { duration = newDuration, direction = newDir, recharges = newRecharge }
+                --else do -- двигаться к штабу
+                --  let newDir@(xdir, ydir) = if part `mod` 2 == 0 then (sdir, 0) else (0, sdir)
+                --  writeIORef state $ updateObject game $ o { duration = newDuration, direction = newDir, recharges = newRecharge }
+                --  return ()
         let changeDirectionCommand = \o -> do
             num <- randomIO :: IO Int
             case num `mod` 3 of
@@ -167,7 +200,10 @@ createTank pos = Tank {
         let checkCollision = \o -> do
             let coord@(x, y) = location o
             num <- randomIO :: IO Int
-            if (x `mod` cellSize == 0) && (y `mod` cellSize == 0) && (num `mod` 8 == 0) then do
+            let periodDuration = 1 + respawnTime `div` 8
+                freq = max 1 (8 - (duration o) `div` periodDuration)
+            -- чем дальше - тем танк начинает больше суетиться
+            if (x `mod` cellSize == 0) && (y `mod` cellSize == 0) && (num `mod` freq == 0) then do
               changeDirection o
               else do
                 num <- randomIO :: IO Int
@@ -211,6 +247,10 @@ createHero pos = tank {
     keyboardCallback _ No _ = return ()
     keyboardCallback state Fire id' = do
       game <- readIORef state
+
+      -- let path = findPath (createAccessGrid game) (4, 1) (0, 12)
+      -- printGrid $ (createAccessGrid game) // (map (, -3) path)
+
       let idea = lookup id' $ objects game
       when (isJust idea && (lifetime (fromJust idea) >= 3)) $ do
         -- Во время этого шага таймера объекты могут измениться внутри forM_, поэтму пришлось обращаться к ним через индексы
@@ -249,7 +289,7 @@ createHero pos = tank {
           let newLife = lifetime obj + 1
               ts = targetSprites obj
               se = ["field:0", "field:1"]
-          writeIORef state $ updateObject game $ obj { lifetime = newLife, sprite = ts, invulnerable = 64, spritesEffects = se }
+          writeIORef state $ updateObject game $ obj { lifetime = newLife, sprite = ts, invulnerable = 12, spritesEffects = se }
           else do
             let (s:ss) = sprite obj
             writeIORef state $ updateObject game $ obj { lifetime = lifetime obj + 1, sprite = (ss ++ [s]) }
@@ -345,7 +385,8 @@ createBullet sd pos dir = Bullet {
                     writeIORef state $ registryObjects newGame booms
                     else do
                       let eagle = snd $ head $ filter (isStandart . snd) others
-                      writeIORef state $ updateObject game $ eagle { health = 100500, sprite = ["fall_standart"] }
+                          newGame = deleteObjectsIf (updateObjects game updated) (\o -> eId o == id' || health o <= 0)
+                      writeIORef state $ updateObject (newGame { lifes = newLifes }) $ eagle { health = 100500, sprite = ["fall_standart"] }
                   else if existsHero then do
                     let newGame = deleteObjectsIf (updateObjects game updated) (\o -> eId o == id' || health o <= 0)
                         withNewHero = registryObject (newGame { lifes = newLifes }) $ createHero (4*cellSize, 0*cellSize)
