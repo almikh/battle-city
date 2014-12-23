@@ -43,7 +43,8 @@ data GameState =
     objects :: [(ID, Entity)],
     sprites :: [(String, Sprite)],
     keys :: [KeyboardEvent], -- нажатые в данный момент клавиши
-    pause :: Bool
+    pause :: Bool,
+    lifes :: Int
   }
 
 data Entity =
@@ -128,7 +129,7 @@ registrySprites :: GameState -> [(String, Sprite)] -> GameState
 registrySprites state sprs = state { sprites = sprs ++ (sprites state) }
 
 initGame :: GameState
-initGame = GameState 0 1 0 18 [] [] [] False
+initGame = GameState 0 1 0 18 [] [] [] False 2
 
 updateObject :: GameState -> Entity -> GameState
 updateObject state obj = state { objects = (updateObject' $ objects state) }

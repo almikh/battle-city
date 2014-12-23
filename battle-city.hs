@@ -113,7 +113,10 @@ initSprites state = do
         ("slow0", "resources/slowtank00_15x15.pic"),
         ("slow1", "resources/slowtank01_15x15.pic"),
         ("fast0", "resources/fasttank00_15x15.pic"),
-        ("fast1", "resources/fasttank01_15x15.pic") ]
+        ("fast1", "resources/fasttank01_15x15.pic"),
+        ("numbers", "resources/numbers_160x16.pic"),
+        ("life", "resources/life_40x40.pic") ]
+
 
   forM_ sprites $ \(name, file) -> do
     game <- readIORef state
@@ -216,14 +219,26 @@ display state = do
   --  translate $ Vector3 (i2f 100) 0.0 0.0
   --  renderString Fixed8By13 . ("FPS: " ++) $ show (fps game)
   -- putStrLn $ ("FPS: " ++) $ show (fps game)
-  displayTanksIcon state
+  displayInfoPanel state
   flush
 
-displayTanksIcon :: IORef GameState -> IO ()
-displayTanksIcon state = do
+displayNumber :: IORef GameState -> Int -> [(Int, Int)] -> IO ()
+displayNumber state n rect = do
+  game <- readIORef state
+  let Just sprite@(Sprite w h _) = lookup "numbers" $ sprites game
+      dx = (1.0 :: GLdouble) / (i2d w)
+      dy = (1.0 :: GLdouble) / (i2d h)
+      dn = i2d n
+      x = dx * 16.0 * dn
+      y = 0.0 :: GLdouble
+      trect = [(x, y), (x, y + dy*16.0), (x + dx*16.0, y + dy*16.0), (x + dx*16.0, y)]
+  drawSpriteEx' rect trect sprite
+
+displayInfoPanel :: IORef GameState -> IO ()
+displayInfoPanel state = do
   game <- readIORef state
   let enemies = enemyTanks game
-      Just sprite = lookup "icon" (sprites game)
+      Just sprite = lookup "icon" $ sprites game
       x = screenWidth + 32 + 16
       y = screenHeight - 16
 
@@ -231,6 +246,14 @@ displayTanksIcon state = do
     let dx = i `mod` 2
         dy = i `div` 2
     drawSprite sprite ((x + dx*16 -1+dx*2, y - dy*17), (16, 16))
+
+  -- жизни игрока
+  let Just sprite = lookup "life" $ sprites game
+  drawSprite sprite ((x, screenHeight `div` 2 - 32), (32, 32))
+  let y = screenHeight `div` 2 - 32
+      rect = [(x+16, y+2), (x+16, y+16), (x+32, y+16), (x+32, y+2)]
+      lifes' = lifes game
+  displayNumber state lifes' rect
   return ()
 
 animTimer :: IORef GameState -> Int -> IO ()

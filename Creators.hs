@@ -249,7 +249,7 @@ createHero pos = tank {
           let newLife = lifetime obj + 1
               ts = targetSprites obj
               se = ["field:0", "field:1"]
-          writeIORef state $ updateObject game $ obj { lifetime = newLife, sprite = ts, invulnerable = 24, spritesEffects = se }
+          writeIORef state $ updateObject game $ obj { lifetime = newLife, sprite = ts, invulnerable = 64, spritesEffects = se }
           else do
             let (s:ss) = sprite obj
             writeIORef state $ updateObject game $ obj { lifetime = lifetime obj + 1, sprite = (ss ++ [s]) }
@@ -330,19 +330,36 @@ createBullet sd pos dir = Bullet {
               let others = filter (\(i, o) -> i /= id' && (not (isTank o) || side o /= bullSide)) $ objects game
                   targets = filter (\(_, o) -> isCollidingObject o && (not (isObstacle o) || not (isImmortal o)) && newRect `isIntersect` (getRect o)) others
               if not (null targets) then do
-                let checkStandart =
-                      \(_, o) -> if isStandart o then o { health = 100500, sprite = ["fall_standart"] }
-                                    else o { health = (health o) - 1 }
-                let updated = map checkStandart $ filter (notImmortalObject . snd) targets
+                let eagle = filter (isStandart . snd) targets
+                    updated = map (\(_, o) -> o { health = (health o) - 1 }) $ filter (\(_, o) -> not (isStandart o) && notImmortalObject o) targets
                     deleted = filter (\o -> health o <= 0) updated
-                    newGame = deleteObjectsIf (updateObjects game updated) (\o -> health o <= 0)
-                    addedExplosions = registryObjects newGame $ map (\o -> createBigBoom (location o) (size o)) deleted
-                writeIORef state $ deleteObject addedExplosions obj
+                    existsHero = not $ null $ filter (\o -> isTank o && side o == 1) deleted
+                    newLifes = if existsHero then (lifes game - 1) else lifes game
+                    isGameOver = (newLifes <= 0) || (not $ null eagle)
+                    booms = map (\o -> createBigBoom (location o) (size o)) deleted
+                if isGameOver then
+                  if not $ null eagle then do
+                    let newEagle = (snd (head eagle)) { health = 100500, sprite = ["fall_standart"] }
+                        withUpdEagle = updateObject game newEagle
+                        newGame = deleteObjectsIf (updateObjects withUpdEagle updated) (\o -> eId o == id' || health o <= 0)
+                    writeIORef state $ registryObjects newGame booms
+                    else do
+                      let eagle = snd $ head $ filter (isStandart . snd) others
+                      writeIORef state $ updateObject game $ eagle { health = 100500, sprite = ["fall_standart"] }
+                  else if existsHero then do
+                    let newGame = deleteObjectsIf (updateObjects game updated) (\o -> eId o == id' || health o <= 0)
+                        withNewHero = registryObject (newGame { lifes = newLifes }) $ createHero (4*cellSize, 0*cellSize)
+                    writeIORef state $ registryObjects withNewHero booms
+                    else do
+                      let newGame = deleteObjectsIf (updateObjects game updated) (\o -> eId o == id' || health o <= 0)
+                      writeIORef state $ registryObjects newGame booms
+
                 when (null deleted) $ do
                   game <- readIORef state
-                  writeIORef state $ registryObject game $ createBoom (location obj)
-                else
-                  writeIORef state $ updateObject game newObj
+                  writeIORef state $ registryObject (deleteObject game obj) $ createBoom (location obj)
+                  return ()
+              else
+                writeIORef state $ updateObject game newObj
 
 createObstacle :: (Int, Int) -> Entity
 createObstacle pos = Obstacle {

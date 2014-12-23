@@ -1,4 +1,4 @@
-{-# LANGUAGE TupleSections #-}
+{-# LANGUAGE TupleSections, TypeOperators #-}
 module Sprite where
 
 import Control.Monad
@@ -62,6 +62,9 @@ loadSprite file = do
 
 i2f :: Int -> GLfloat
 i2f = fromIntegral
+
+i2d :: Int -> GLdouble
+i2d = fromIntegral
 
 getTextureCoord :: RotationType -> [(GLdouble, GLdouble)]
 getTextureCoord ORIGINAL = [(0, 0), (0, 1), (1, 1), (1, 0)]
