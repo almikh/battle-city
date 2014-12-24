@@ -14,6 +14,8 @@ import PathFinder
 
 steps = 12
 cellSize = 32
+normalRechargeTime = 1000
+
 screenWidth :: Int
 screenWidth = 32*13
 
@@ -21,7 +23,7 @@ screenHeight :: Int
 screenHeight = 32*13
 
 respawnTime :: Int
-respawnTime = 20000
+respawnTime = 25000
 
 loadMap :: FilePath -> IO TGrid
 loadMap file = do
@@ -112,6 +114,7 @@ createTank pos = Tank {
     lifetime = 0,
     duration = 0,
     side = 0,
+    price = 0,
     invulnerable = 0,
     moveTowards = False,
     speed = cellSize `div` 16,
@@ -120,7 +123,7 @@ createTank pos = Tank {
     health = 1,
     targetDt = 0,
     sprite = [ "star:0", "star:1", "star:2", "star:3" ],
-    rechargeTime = 1000,
+    rechargeTime = normalRechargeTime,
     targetSprites = [],
     spritesEffects = [],
     onKeyboardCallback = (\_ _ _ -> return ()), -- никак не реагирует
@@ -274,7 +277,7 @@ createTank pos = Tank {
 createHero :: (Int, Int) -> Entity
 createHero pos = tank {
     side = 1,
-    targetDt = averageDt,
+    targetDt = normalDt,
     targetSprites = ["hero0", "hero1"],
     onKeyboardCallback = keyboardCallback,
     onTimerCallback = timerCallback
@@ -342,30 +345,45 @@ createHero pos = tank {
         let newRecharge = (\r -> if r /= 0 then r - dt else r) $ recharges obj
         writeIORef state $ updateObject game $ obj { recharges = newRecharge }
 
-createSlowTank :: (Int, Int) -> Entity
-createSlowTank pos = tank {
+createHeavyTank :: (Int, Int) -> Entity
+createHeavyTank pos = tank {
     side = 0,
     health = 4,
+    price = 400,
     targetDt = slowDt,
-    targetSprites = ["slow0", "slow1"],
+    targetSprites = ["heavy0", "heavy1"],
     onKeyboardCallback = (\_ _ _ -> return ())
   }
   where
     tank = createTank pos
 
-createAvTank :: (Int, Int) -> Entity
-createAvTank pos = tank {
+createNormalTank :: (Int, Int) -> Entity
+createNormalTank pos = tank {
     side = 0,
-    targetDt = averageDt,
-    targetSprites = ["average0", "average1"],
+    price = 100,
+    targetDt = normalDt,
+    targetSprites = ["normal0", "normal1"],
     onKeyboardCallback = (\_ _ _ -> return ())
   }
   where
     tank = createTank pos
 
-createFastTank :: (Int, Int) -> Entity
-createFastTank pos = tank {
+createRapidFireTank :: (Int, Int) -> Entity
+createRapidFireTank pos = tank {
     side = 0,
+    price = 300,
+    targetDt = normalDt,
+    rechargeTime = normalRechargeTime `div` 2,
+    targetSprites = ["rapid0", "rapid1"],
+    onKeyboardCallback = (\_ _ _ -> return ())
+  }
+  where
+    tank = createTank pos
+
+createArmoredVehicle :: (Int, Int) -> Entity
+createArmoredVehicle pos = tank {
+    side = 0,
+    price = 200,
     targetDt = fastDt,
     targetSprites = ["fast0", "fast1"],
     onKeyboardCallback = (\_ _ _ -> return ())
@@ -569,9 +587,13 @@ createRespawnPoint pos = RespawnPoint {
           oldDuration = duration obj
       if (enemyTanks game > 0) && (oldDuration >= respawnTime) then do
         let oldEnemyTanks = enemyTanks game
-        -- let newGame = registryObject (game { enemyTanks = oldEnemyTanks - 1 }) $ createSlowTank (location obj)
-        let newGame = game { enemyTanks = oldEnemyTanks - 1 }
+        num <- randomIO :: IO Int
+        let newGame = case num `mod` 4 of
+              0 -> registryObject (game { enemyTanks = oldEnemyTanks - 1 }) $ createNormalTank (location obj)
+              1 -> registryObject (game { enemyTanks = oldEnemyTanks - 1 }) $ createHeavyTank (location obj)
+              2 -> registryObject (game { enemyTanks = oldEnemyTanks - 1 }) $ createRapidFireTank (location obj)
+              3 -> registryObject (game { enemyTanks = oldEnemyTanks - 1 }) $ createArmoredVehicle (location obj)
         writeIORef state $ updateObject newGame $ obj { duration = 0 }
         else
           writeIORef state $ updateObject game $ obj { duration = oldDuration + 100 }
-  timerCallback state _ obj = return ()
+  timerCallback _ _ _ = return ()

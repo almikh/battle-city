@@ -16,8 +16,8 @@ screenRect = ((0, 0), (32*13, 32*13))
 slowDt :: Int
 slowDt = 36
 
-averageDt :: Int
-averageDt = 24
+normalDt :: Int
+normalDt = 24
 
 fastDt :: Int
 fastDt = 12
@@ -66,6 +66,7 @@ data Entity =
     layer :: Int,
     location :: TLocation,
     direction :: TLocation,
+    price :: Int,
     speed :: Int,
     size :: TSize,
     side :: Int,
@@ -220,10 +221,10 @@ containsAny rect xs = any (==True) $ map (contains rect) xs
 isIntersect :: TRect -> TRect -> Bool
 isIntersect r1@((x1, y1), (w1, h1)) r2@((x2, y2), (w2, h2)) = fContains || sContains || fPartContains || sPartContains
   where
-    fPartContains = (x1==x2 && (x1+w1)==(x2+w2) && ((y2<=y1 && y1 <=(y2+h2)) || (y2<=(y1+h1) && (y1+h1)<=(y2+h2)))) ||
-      (y1==y2 && (y1+h1)==(y2+h2) && ((x2<=x1 && x1<=(x2+w2)) || (x2<=(x1+w1) && (x1+w1)<=(x2+w2))))
-    sPartContains = (x2==x1 && (x2+w2)==(x1+w1) && ((y1<=y2 && y2<=(y1+h1)) || (y1<=(y2+h2) && (y2+h2)<=(y1+h1)))) ||
-        (y2==y1 && (y2+h2)==(y1+h1) && ((x1<=x2 && x2<=(x1+w1)) || (x1<=(x2+w2) && (x2+w2)<=(x1+w1))))
+    fPartContains = (x1==x2 && (x1+w1)==(x2+w2) && ((y2<y1 && y1 <(y2+h2)) || (y2<(y1+h1) && (y1+h1)<(y2+h2)))) ||
+       (y1==y2 && (y1+h1)==(y2+h2) && ((x2<x1 && x1<(x2+w2)) || (x2<(x1+w1) && (x1+w1)<(x2+w2))))
+    sPartContains = (x2==x1 && (x2+w2)==(x1+w1) && ((y1<y2 && y2<(y1+h1)) || (y1<(y2+h2) && (y2+h2)<(y1+h1)))) ||
+       (y2==y1 && (y2+h2)==(y1+h1) && ((x1<x2 && x2<(x1+w1)) || (x1<(x2+w2) && (x2+w2)<(x1+w1))))
     fContains = containsAny r1 [(x2, y2), (x2+w2, y2), (x2+w2, y2+h2), (x2, y2+h2)]
     sContains = containsAny r2 [(x1, y1), (x1+w1, y1), (x1+w1, y1+h1), (x1, y1+h1)]
 
@@ -236,7 +237,7 @@ changeLocation :: TLocation -> (Int, Int) -> TLocation
 changeLocation (x, y) (dx, dy) = (x+dx, y+dy)
 
 isTank :: Entity -> Bool
-isTank (Tank _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _) = True
+isTank (Tank _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _) = True
 isTank _ = False
 
 isBullet :: Entity -> Bool

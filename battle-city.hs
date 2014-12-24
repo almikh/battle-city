@@ -59,7 +59,7 @@ main = do
   keyboardUpCallback  $= Just (keyboardUp state)
 
   addTimerCallback slowDt (timerDt state slowDt)
-  addTimerCallback averageDt (timerDt state averageDt)
+  addTimerCallback normalDt (timerDt state normalDt)
   addTimerCallback fastDt (timerDt state fastDt)
   addTimerCallback 600 (timerDt state 600)
   addTimerCallback 12 (bulletsTimer state 12)
@@ -126,10 +126,12 @@ initSprites state = do
         ("hero0", "resources/goldtank00_15x15.pic"),
         ("hero1", "resources/goldtank01_15x15.pic"),
         ("gameover", "resources/gameover_301x199.pic"),
-        ("average0", "resources/avtank00_15x15.pic"),
-        ("average1", "resources/avtank01_15x15.pic"),
-        ("slow0", "resources/slowtank00_15x15.pic"),
-        ("slow1", "resources/slowtank01_15x15.pic"),
+        ("normal0", "resources/normaltank00_15x15.pic"),
+        ("normal1", "resources/normaltank01_15x15.pic"),
+        ("heavy0", "resources/heavytank00_15x15.pic"),
+        ("heavy1", "resources/heavytank01_15x15.pic"),
+        ("rapid0", "resources/rapidtank00_15x15.pic"),
+        ("rapid1", "resources/rapidtank01_15x15.pic"),
         ("fast0", "resources/fasttank00_15x15.pic"),
         ("fast1", "resources/fasttank01_15x15.pic"),
         ("numbers", "resources/numbers_160x16.pic"),
@@ -148,7 +150,7 @@ initObjects state = do
   game <- readIORef state
   let objs = [
         createHero (4*cellSize, 0*cellSize),
-        createSlowTank (0*cellSize, 12*cellSize) ]
+        createRapidFireTank (0*cellSize, 12*cellSize) ]
   writeIORef state $ registryObjects game objs
   putStrLn "Objects loaded..."
 
