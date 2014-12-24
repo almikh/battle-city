@@ -74,6 +74,7 @@ data Entity =
     duration :: Int,
     recharges :: Int,
     invulnerable :: Int,
+    moveTowards :: Bool,
     sprite :: TAnimation,
     rechargeTime :: Int,
     targetDt :: Int,
@@ -235,7 +236,7 @@ changeLocation :: TLocation -> (Int, Int) -> TLocation
 changeLocation (x, y) (dx, dy) = (x+dx, y+dy)
 
 isTank :: Entity -> Bool
-isTank (Tank _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _) = True
+isTank (Tank _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _) = True
 isTank _ = False
 
 isBullet :: Entity -> Bool

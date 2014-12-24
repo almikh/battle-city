@@ -5,6 +5,7 @@ import Game
 import System.Random
 import Control.Monad
 import Data.Array.IArray
+import qualified Data.Map as Map
 import Data.IORef
 import Data.List
 import Data.Maybe
@@ -20,7 +21,7 @@ screenHeight :: Int
 screenHeight = 32*13
 
 respawnTime :: Int
-respawnTime = 25000
+respawnTime = 20000
 
 loadMap :: FilePath -> IO TGrid
 loadMap file = do
@@ -112,6 +113,7 @@ createTank pos = Tank {
     duration = 0,
     side = 0,
     invulnerable = 0,
+    moveTowards = False,
     speed = cellSize `div` 16,
     size = (cellSize, cellSize),
     recharges = 0,
@@ -157,20 +159,22 @@ createTank pos = Tank {
         let Just obj = lookup id' $ objects game
         let spd = speed obj
         let others = filter (\(i, o) -> i /= id' && notEffect o) $ objects game
-        let newDuration = duration obj + dt
+        let newDuration = if duration obj < respawnTime then duration obj + dt else 0
         let newRecharge = (\r -> if r /= 0 then r - dt else r) $ recharges obj
+
         let changeDirection = \o -> do
             num <- randomIO :: IO Int
             part <- randomIO :: IO Int
             let periodDuration = respawnTime `div` 8
-            if duration o < periodDuration then do -- двигаться случайно
+                (x, y) = location o
+            if newDuration < periodDuration then do -- двигаться случайно
               let sdir = if num `mod` 2 == 0 then -1 else 1
                   newDir@(xdir, ydir) = if part `mod` 2 == 0 then (sdir, 0) else (0, sdir)
-              writeIORef state $ updateObject game $ o { duration = newDuration, direction = newDir, recharges = newRecharge }
-              else do --if duration obj < periodDuration*2 then do -- двигаться к игроку
+              putStrLn "random move..."
+              writeIORef state $ updateObject game $ o { moveTowards = False, duration = newDuration, direction = newDir, recharges = newRecharge }
+              else if newDuration < periodDuration*3 then do -- двигаться к игроку
                 let tempGrid = createAccessGrid game
                     targets = filter (\(i, o) -> isTank o && side o == 1) $ objects game
-                    (x, y) = location obj
                 when (not $ null targets) $ do
                   let target = snd $ head targets
                       (tx, ty) = location target
@@ -181,12 +185,44 @@ createTank pos = Tank {
                   when (length path > 1) $ do
                     let nextCell@(nx, ny) = head $ tail path
                         newDir@(xdir, ydir) = (nx - cx, ny - cy)
+                    putStrLn "find hero..."
+                    writeIORef state $ updateObject game $ o { moveTowards = True, duration = newDuration, direction = newDir, recharges = newRecharge }
+                else do -- двигаться к штабу
+                  let eagle = snd $ head $ filter (isStandart . snd) others
+                      tempGrid = createAccessGrid game
+                      thisCell@(tx, ty) = (x `div` cellSize, y `div` cellSize)
+                      fGrid = runWave tempGrid thisCell
+                      eagleLocation@(ex, ey) = location eagle
+                      eagleCell@(ecx, ecy) = (ex `div` cellSize, ey `div` cellSize)
+                      sGrid = runWave (newGrid 13 13) eagleCell
+                      foldFunc d (i, e) = if e > 0 then Map.insert key newVal d else d
+                        where
+                          key = sGrid ! i
+                          oldVal = if isJust (Map.lookup key d) then fromJust (Map.lookup key d) else []
+                          newVal = (i, fGrid ! i) : oldVal
+                      dictionary = foldl foldFunc Map.empty (assocs fGrid)
 
-                    writeIORef state $ updateObject game $ o { duration = newDuration, direction = newDir, recharges = newRecharge }
-                --else do -- двигаться к штабу
-                --  let newDir@(xdir, ydir) = if part `mod` 2 == 0 then (sdir, 0) else (0, sdir)
-                --  writeIORef state $ updateObject game $ o { duration = newDuration, direction = newDir, recharges = newRecharge }
-                --  return ()
+                  let ls = Map.assocs dictionary
+                      selectTargetCell ((w, cells) : []) = fst $ minimumBy (\x y -> snd x `compare` snd y) cells
+                      selectTargetCell ((w, cells) : oths) = if (fromIntegral price1) > (fromIntegral price2)*1.5 then cell2 else cell1
+                        where
+                          min1@(cell1, price1) = minimumBy (\x y -> snd x `compare` snd y) cells
+                          min2@(cell2, price2) = minimumBy (\x y -> snd x `compare` snd y) $ snd $ head oths
+
+                  let targetCell = selectTargetCell ls
+                      accessGrid = tempGrid // [(thisCell, 0)]
+                      path = findPath accessGrid thisCell targetCell
+
+                  if (length path > 1) then do
+                    let nextCell@(nx, ny) = head $ tail path
+                        newDir@(xdir, ydir) = (nx - tx, ny - ty)
+                    putStrLn "find eagle..."
+                    writeIORef state $ updateObject game $ o { moveTowards = True, duration = newDuration, direction = newDir, recharges = newRecharge }
+                    else do
+                      let sdir = if num `mod` 2 == 0 then -1 else 1
+                          newDir@(xdir, ydir) = if part `mod` 2 == 0 then (sdir, 0) else (0, sdir)
+                      putStrLn "forced random move..."
+                      writeIORef state $ updateObject game $ o { moveTowards = False, duration = newDuration, direction = newDir, recharges = newRecharge }
         let changeDirectionCommand = \o -> do
             num <- randomIO :: IO Int
             case num `mod` 3 of
@@ -201,9 +237,10 @@ createTank pos = Tank {
             let coord@(x, y) = location o
             num <- randomIO :: IO Int
             let periodDuration = 1 + respawnTime `div` 8
+                alignInCell = (x `mod` cellSize == 0) && (y `mod` cellSize == 0)
                 freq = max 1 (8 - (duration o) `div` periodDuration)
             -- чем дальше - тем танк начинает больше суетиться
-            if (x `mod` cellSize == 0) && (y `mod` cellSize == 0) && (num `mod` freq == 0) then do
+            if alignInCell && (moveTowards o || num `mod` freq == 0) then do
               changeDirection o
               else do
                 num <- randomIO :: IO Int
@@ -213,8 +250,8 @@ createTank pos = Tank {
                     collision = filter (\(_, e) -> isCollidingObject e && (getRect newObj) `isIntersect` (getRect e)) $ others
                     flag = containsRect screenRect (getRect newObj) && null collision
                 if not flag && (num `mod` 16 == 0) then do
-                  if (x `mod` cellSize == 0) && (y `mod` cellSize == 0) then do -- invert direction
-                    writeIORef state $ updateObject game $ o { duration = newDuration, direction = (-xdir, -ydir), recharges = newRecharge }
+                  if alignInCell then do -- invert direction
+                    writeIORef state $ updateObject game $ o { moveTowards = False, duration = newDuration, direction = (-xdir, -ydir), recharges = newRecharge }
                     else do
                       changeDirectionCommand o
                   else do
@@ -232,7 +269,7 @@ createTank pos = Tank {
         if flag then
           writeIORef state $ updateObject game newObj
           else
-            writeIORef state $ updateObject game $ obj { duration = newDuration, recharges = newRecharge }
+            writeIORef state $ updateObject game $ obj { moveTowards = False, duration = newDuration, recharges = newRecharge }
 
 createHero :: (Int, Int) -> Entity
 createHero pos = tank {
@@ -532,7 +569,8 @@ createRespawnPoint pos = RespawnPoint {
           oldDuration = duration obj
       if (enemyTanks game > 0) && (oldDuration >= respawnTime) then do
         let oldEnemyTanks = enemyTanks game
-        let newGame = registryObject (game { enemyTanks = oldEnemyTanks - 1 }) $ createSlowTank (location obj)
+        -- let newGame = registryObject (game { enemyTanks = oldEnemyTanks - 1 }) $ createSlowTank (location obj)
+        let newGame = game { enemyTanks = oldEnemyTanks - 1 }
         writeIORef state $ updateObject newGame $ obj { duration = 0 }
         else
           writeIORef state $ updateObject game $ obj { duration = oldDuration + 100 }
