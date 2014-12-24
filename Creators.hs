@@ -23,7 +23,7 @@ screenHeight :: Int
 screenHeight = 32*13
 
 respawnTime :: Int
-respawnTime = 25000
+respawnTime = 2500
 
 loadMap :: FilePath -> IO TGrid
 loadMap file = do
@@ -584,8 +584,11 @@ createRespawnPoint pos = RespawnPoint {
     let idea = lookup id' $ objects game
     when (isJust idea) $ do
       let obj = fromJust idea
+          thisCoord = location obj
           oldDuration = duration obj
-      if (enemyTanks game > 0) && (oldDuration >= respawnTime) then do
+          isEmpty = null $ filter (\(i, o) -> isTank o && location o == thisCoord) $ objects game
+          exists = length $ filter (\(i, o) -> isTank o && side o == 0) $ objects game
+      if (enemyTanks game > 0) && isEmpty && (exists<4) && (oldDuration >= respawnTime) then do
         let oldEnemyTanks = enemyTanks game
         num <- randomIO :: IO Int
         let newGame = case num `mod` 4 of
