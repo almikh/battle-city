@@ -23,7 +23,7 @@ screenHeight :: Int
 screenHeight = 32*13
 
 respawnTime :: Int
-respawnTime = 2500
+respawnTime = 25000
 
 loadMap :: FilePath -> IO TGrid
 loadMap file = do
@@ -287,12 +287,8 @@ createHero pos = tank {
     keyboardCallback _ No _ = return ()
     keyboardCallback state Fire id' = do
       game <- readIORef state
-
-      -- let path = findPath (createAccessGrid game) (4, 1) (0, 12)
-      -- printGrid $ (createAccessGrid game) // (map (, -3) path)
-
       let idea = lookup id' $ objects game
-      when (isJust idea && (lifetime (fromJust idea) >= 3)) $ do
+      when (isJust idea && (lifetime (fromJust idea) >= 6)) $ do
         -- Во время этого шага таймера объекты могут измениться внутри forM_, поэтму пришлось обращаться к ним через индексы
         let obj = fromJust idea
         when (recharges obj <= 0) $ do
@@ -308,14 +304,30 @@ createHero pos = tank {
       game <- readIORef state
       let idea = lookup id' $ objects game
       when (isJust idea && (lifetime (fromJust idea) >= 3)) $ do
-        let obj = fromJust idea
-        let spd = speed obj
         let newDir@(xdir, ydir) = getDir key
+        let checkAlign = \o -> do -- поддержка системы при повороте танка
+            let curDir@(cxdir, cydir) = direction o
+            let dirDiff = (xdir+cxdir)^2 + (ydir+cydir)^2
+            if newDir /= curDir && dirDiff == 2 then do
+              let coord@(x, y) = location o
+                  mx = x `mod` cellSize
+                  my = y `mod` cellSize
+                  newX = if mx == cellSize-2 then x+2 else (if mx == 2 then x-2 else x)
+                  newY = if my == cellSize-2 then y+2 else (if my == 2 then y-2 else y)
+              -- putStrLn "support system when you turn..."
+              return $ o { location = (newX, newY) }
+              else
+                return o
+
+        obj <- checkAlign $ fromJust idea
+        let spd = speed obj
+        let curDir@(cxdir, cydir) = direction obj
+        let dirDiff = (xdir+cxdir)^2 + (ydir+cydir)^2
         let newLocation@(nx, ny) = changeLocation (location obj) (xdir*spd, ydir*spd)
         let newObj = obj { location = newLocation, direction = newDir }
         let others = filter (\(i, o) -> i /= eId obj && notEffect o) $ objects game
         let obstacles = filter (\(i, o) -> isCollidingObject o && (getRect newObj) `isIntersect` (getRect o)) others
-        if null obstacles && (containsRect screenRect (getRect newObj)) then
+        if null obstacles && (containsRect screenRect (getRect newObj)) then do
           writeIORef state $ updateObject game newObj
           else writeIORef state $ updateObject game $ obj { direction = newDir }
 

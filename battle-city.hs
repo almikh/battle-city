@@ -149,8 +149,8 @@ initObjects :: IORef GameState -> IO ()
 initObjects state = do
   game <- readIORef state
   let objs = [
-        createHero (4*cellSize, 0*cellSize),
-        createRapidFireTank (0*cellSize, 12*cellSize) ]
+        createHero (4*cellSize, 0*cellSize)]
+        -- createRapidFireTank (0*cellSize, 12*cellSize) ]
   writeIORef state $ registryObjects game objs
   putStrLn "Objects loaded..."
 
