@@ -432,7 +432,7 @@ createBullet sd pos dir = Bullet {
               newObj = obj { location = newLocation }
               newRect = getRect newObj
           if not (containsRect screenRect newRect) then do
-            writeIORef state $ deleteObject (registryObject game $ createBoom objCoord) obj
+            writeIORef state $ deleteObject (registryObject game $ createBoom (nx + (sx `div` 2), ny + (sy `div` 2))) obj
             else do
               let others = filter (\(i, o) -> i /= id' && (not (isTank o) || side o /= bullSide)) $ objects game
                   targets = filter (\(_, o) -> isCollidingObject o && (not (isObstacle o) || not (isImmortal o)) && newRect `isIntersect` (getRect o)) others
@@ -443,7 +443,7 @@ createBullet sd pos dir = Bullet {
                     existsHero = not $ null $ filter (\o -> isTank o && side o == 1) deleted
                     newLifes = if existsHero then (lifes game - 1) else lifes game
                     isGameOver = (newLifes <= 0) || (not $ null eagle)
-                    booms = map (\o -> createBigBoom (location o) (size o)) deleted
+                    booms = map (\o -> createBigBoom (nx + (sx `div` 2), ny + (sy `div` 2)) (32, 32)) deleted
                 if isGameOver then
                   if not $ null eagle then do
                     let newEagle = (snd (head eagle)) { health = 100500, sprite = ["fall_standart"] }
@@ -464,7 +464,7 @@ createBullet sd pos dir = Bullet {
 
                 when (null deleted) $ do
                   game <- readIORef state
-                  writeIORef state $ registryObject (deleteObject game obj) $ createBoom (location obj)
+                  writeIORef state $ registryObject (deleteObject game obj) $ createBoom (nx + (sx `div` 2), ny + (sy `div` 2))
                   return ()
               else
                 writeIORef state $ updateObject game newObj
