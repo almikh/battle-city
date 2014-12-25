@@ -122,6 +122,15 @@ data Entity =
     size :: TLocation,
     location :: TLocation,
     onTimerCallback :: TTimerCallback
+  } |
+  PostmortemLights {
+    eId :: ID,
+    layer :: Int,
+    duration :: Int,
+    size :: TLocation,
+    sprite :: TAnimation,
+    location :: TLocation,
+    onTimerCallback :: TTimerCallback
   }
 
 -- GameState
@@ -259,6 +268,10 @@ isStandart _ = False
 isRespawnPoint :: Entity -> Bool
 isRespawnPoint (RespawnPoint _ _ _ _ _ _ _) = True
 isRespawnPoint _ = False
+
+isPostmortemLights :: Entity -> Bool
+isPostmortemLights (PostmortemLights _ _ _ _ _ _ _) = True
+isPostmortemLights _ = False
 
 isImpassableObj :: Entity -> Bool
 isImpassableObj (Obstacle _ _ _ is _ _ _ _ _ _) = is

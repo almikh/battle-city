@@ -135,7 +135,14 @@ initSprites state = do
         ("fast0", "resources/fasttank00_15x15.pic"),
         ("fast1", "resources/fasttank01_15x15.pic"),
         ("numbers", "resources/numbers_160x16.pic"),
-        ("life", "resources/life_40x40.pic") ]
+        ("life", "resources/life_40x40.pic"),
+        ("100", "resources/100_15x15.pic"),
+        ("200", "resources/200_15x15.pic"),
+        ("300", "resources/300_15x15.pic"),
+        ("400", "resources/400_15x15.pic"),
+        ("500", "resources/500_15x15.pic"),
+        ("clock", "resources/clock_15x15.pic"),
+        ("helmet", "resources/helmet_15x15.pic") ]
 
 
   forM_ sprites $ \(name, file) -> do
@@ -149,8 +156,8 @@ initObjects :: IORef GameState -> IO ()
 initObjects state = do
   game <- readIORef state
   let objs = [
-        createHero (4*cellSize, 0*cellSize)]
-        -- createRapidFireTank (0*cellSize, 12*cellSize) ]
+        createHero (4*cellSize, 0*cellSize),
+        createNormalTank (0*cellSize, 12*cellSize) ]
   writeIORef state $ registryObjects game objs
   putStrLn "Objects loaded..."
 

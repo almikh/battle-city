@@ -444,12 +444,14 @@ createBullet sd pos dir = Bullet {
                     newLifes = if existsHero then (lifes game - 1) else lifes game
                     isGameOver = (newLifes <= 0) || (not $ null eagle)
                     booms = map (\o -> createBigBoom (nx + (sx `div` 2), ny + (sy `div` 2)) (32, 32)) deleted
+                    postmortemLights = map (\o -> createPostmortemLights (location o) (price o)) $ filter (\o -> isTank o && side o == 0) deleted
+
                 if isGameOver then
                   if not $ null eagle then do
                     let newEagle = (snd (head eagle)) { health = 100500, sprite = ["fall_standart"] }
                         withUpdEagle = updateObject game newEagle
                         newGame = deleteObjectsIf (updateObjects withUpdEagle updated) (\o -> eId o == id' || health o <= 0)
-                    writeIORef state $ registryObjects newGame booms
+                    writeIORef state $ registryObjects newGame (booms ++ postmortemLights)
                     else do
                       let eagle = snd $ head $ filter (isStandart . snd) others
                           newGame = deleteObjectsIf (updateObjects game updated) (\o -> eId o == id' || health o <= 0)
@@ -457,10 +459,10 @@ createBullet sd pos dir = Bullet {
                   else if existsHero then do
                     let newGame = deleteObjectsIf (updateObjects game updated) (\o -> eId o == id' || health o <= 0)
                         withNewHero = registryObject (newGame { lifes = newLifes }) $ createHero (4*cellSize, 0*cellSize)
-                    writeIORef state $ registryObjects withNewHero booms
+                    writeIORef state $ registryObjects withNewHero (booms ++ postmortemLights)
                     else do
                       let newGame = deleteObjectsIf (updateObjects game updated) (\o -> eId o == id' || health o <= 0)
-                      writeIORef state $ registryObjects newGame booms
+                      writeIORef state $ registryObjects newGame (booms ++ postmortemLights)
 
                 when (null deleted) $ do
                   game <- readIORef state
@@ -612,3 +614,27 @@ createRespawnPoint pos = RespawnPoint {
         else
           writeIORef state $ updateObject game $ obj { duration = oldDuration + 100 }
   timerCallback _ _ _ = return ()
+
+createPostmortemLights :: (Int, Int) -> Int -> Entity
+createPostmortemLights (x, y) n = PostmortemLights {
+    eId = 0,
+    layer = 1,
+    duration = 2000,
+    size = (thisSize, thisSize),
+    location = (x + (cellSize-thisSize) `div` 2, y + (cellSize-thisSize) `div` 2),
+    sprite = [show n],
+    onTimerCallback = timerCallback
+  }
+  where
+    thisSize = (cellSize `div` 3) * 2
+    timerCallback state 100 id' = do
+      game <- readIORef state
+      let idea = lookup id' $ objects game
+      when (isJust idea) $ do
+        let obj = fromJust idea
+            newDuration = duration obj - 100
+        if newDuration <= 0 then
+          writeIORef state $ deleteObject game obj
+          else
+            writeIORef state $ updateObject game $ obj { duration = newDuration }
+    timerCallback _ _ _ = return ()
