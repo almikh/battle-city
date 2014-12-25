@@ -105,7 +105,7 @@ initSprites state = do
         ("field:1", "resources/field1_16x16.pic"),
         ("pause", "resources/pause_39x8.pic"),
         ("icon", "resources/tankicon_16x16.pic"),
-        ("bullet", "resources/bullet_5x5.pic"),
+        ("bullet", "resources/bullet_8x8.pic"),
         ("armor", "resources/armor_8x8.pic"),
         ("grass", "resources/grass_8x8.pic"),
         ("water:0", "resources/water0_8x8.pic"),

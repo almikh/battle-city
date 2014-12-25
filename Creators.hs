@@ -412,7 +412,7 @@ createBullet sd pos dir = Bullet {
     speed = cellSize `div` 16,
     side = sd,
     health = 1,
-    size = (5, 5),
+    size = (8, 8),
     sprite = ["bullet"],
     onTimerCallback = timerCallback
   }
