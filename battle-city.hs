@@ -157,12 +157,14 @@ initObjects state = do
   game <- readIORef state
   let objs = [
         createHero (4*cellSize, 0*cellSize),
-        createNormalTank (0*cellSize, 12*cellSize) ]
+        createNormalTank (0*cellSize, 12*cellSize),
+        createBonusReinforcingEagle (4*cellSize, 2*cellSize) ]
   writeIORef state $ registryObjects game objs
   putStrLn "Objects loaded..."
 
 renderObject :: GameState -> Entity -> IO ()
 renderObject game obj
+  | isReinforcingEagle obj = return ()
   | isBullet obj = do
     let dir = dir2rot $ direction obj
     drawSpriteEx dir sprite rect

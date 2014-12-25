@@ -55,14 +55,20 @@ rotateAntiClockwise _ = (0, 0)
 
 notImmortalObject :: Entity -> Bool
 notImmortalObject o
+  | isReinforcingEagle o = False
+  | isPostmortemLights o = False
   | isRespawnPoint o = False
+  | isBonus o = False
   | isObstacle o = isDestroyed o
   | isTank o = invulnerable o == 0
   | otherwise = True
 
 isCollidingObject :: Entity -> Bool
 isCollidingObject o
+  | isReinforcingEagle o = False
+  | isPostmortemLights o = False
   | isRespawnPoint o = False
+  | isBonus o = False
   | isBoom o = False
   | isObstacle o = isImpassable o -- && not (isImmortal o)
   | otherwise = True
@@ -70,7 +76,9 @@ isCollidingObject o
 notEffect :: Entity -> Bool
 notEffect o
   | isBoom o = False
+  | isBonus o = False
   | isBullet o = False
+  | isPostmortemLights o = False
   | otherwise = True
 
 checkInvulnerable :: Entity -> IO Entity
@@ -115,6 +123,7 @@ createTank pos = Tank {
     duration = 0,
     side = 0,
     price = 0,
+    sleepTime = 0,
     invulnerable = 0,
     moveTowards = False,
     speed = cellSize `div` 16,
@@ -136,15 +145,16 @@ createTank pos = Tank {
       let idea = lookup id' $ objects game
       when (isJust idea) $ do
         let obj = fromJust idea
+            newSleepTime = if sleepTime obj > 0 then sleepTime obj - 100 else 0
         if (lifetime obj == 6) then
-          writeIORef state $ updateObject game $ obj { lifetime = lifetime obj + 1, sprite = targetSprites obj }
+          writeIORef state $ updateObject game $ obj { sleepTime = newSleepTime, lifetime = lifetime obj + 1, sprite = targetSprites obj }
           else do
             let (s:ss) = sprite obj
-            writeIORef state $ updateObject game $ obj { lifetime = lifetime obj + 1, sprite = (ss ++ [s]) }
+            writeIORef state $ updateObject game $ obj { sleepTime = newSleepTime, lifetime = lifetime obj + 1, sprite = (ss ++ [s]) }
     timerCallback state dt id' = do
       game <- readIORef state
       let idea = lookup id' $ objects game
-      when (isJust idea && (lifetime (fromJust idea) >= 6) && (dt == targetDt (fromJust idea))) $ do
+      when (isJust idea && (lifetime (fromJust idea) >= 6) && (sleepTime (fromJust idea) == 0) && (dt == targetDt (fromJust idea))) $ do
         let obj = fromJust idea
         -- проверка выстрела
         num <- randomIO :: IO Int
@@ -336,19 +346,20 @@ createHero pos = tank {
       let idea = lookup id' $ objects game
       when (isJust idea) $ do
         obj <- checkInvulnerable $ fromJust idea
+        let newSleepTime = if sleepTime obj > 0 then sleepTime obj - 100 else 0
 
         if (lifetime obj == 6) then do
           let newLife = lifetime obj + 1
               ts = targetSprites obj
               se = ["field:0", "field:1"]
-          writeIORef state $ updateObject game $ obj { lifetime = newLife, sprite = ts, invulnerable = 12, spritesEffects = se }
+          writeIORef state $ updateObject game $ obj { sleepTime = newSleepTime, lifetime = newLife, sprite = ts, invulnerable = 12, spritesEffects = se }
           else do
             let (s:ss) = sprite obj
-            writeIORef state $ updateObject game $ obj { lifetime = lifetime obj + 1, sprite = (ss ++ [s]) }
+            writeIORef state $ updateObject game $ obj { sleepTime = newSleepTime, lifetime = lifetime obj + 1, sprite = (ss ++ [s]) }
     timerCallback state dt id' = do
       game <- readIORef state
       let idea = lookup id' $ objects game
-      when (isJust idea && (lifetime (fromJust idea) >= 6) && (dt == targetDt (fromJust idea))) $ do
+      when (isJust idea && (lifetime (fromJust idea) >= 6) && (sleepTime (fromJust idea) == 0) &&  (dt == targetDt (fromJust idea))) $ do
         forM_ (keys game) $ \key -> do -- обработаем события клавиатуры
           (onKeyboardCallback (fromJust idea)) state key id'
 
@@ -619,7 +630,8 @@ createPostmortemLights :: (Int, Int) -> Int -> Entity
 createPostmortemLights (x, y) n = PostmortemLights {
     eId = 0,
     layer = 1,
-    duration = 2000,
+    health = 1,
+    duration = 1000,
     size = (thisSize, thisSize),
     location = (x + (cellSize-thisSize) `div` 2, y + (cellSize-thisSize) `div` 2),
     sprite = [show n],
@@ -638,3 +650,102 @@ createPostmortemLights (x, y) n = PostmortemLights {
           else
             writeIORef state $ updateObject game $ obj { duration = newDuration }
     timerCallback _ _ _ = return ()
+
+createBonus :: (Int, Int) -> Entity
+createBonus pos = Bonus {
+    eId = 0,
+    layer = 1,
+    health = 1,
+    duration = 20000,
+    size = (cellSize, cellSize),
+    location = pos,
+    sprite = ["helmet"],
+    onTimerCallback = timerCallback,
+    onAction = (\_ _ -> return ())
+  }
+  where
+    timerCallback state 100 id' = do
+      game <- readIORef state
+      -- проверка столкновений
+      (onAction (fromJust $ lookup id' $ objects game)) state id'
+      -- обыденные действия
+      game <- readIORef state
+      let idea = lookup id' $ objects game
+      when (isJust idea) $ do
+        let obj = fromJust idea
+            newDuration = duration obj - 100
+        if newDuration <= 0 then
+          writeIORef state $ deleteObject game obj
+          else
+            writeIORef state $ updateObject game $ obj { duration = newDuration }
+    timerCallback _ _ _ = return ()
+
+createBonusClock :: (Int, Int) -> Entity
+createBonusClock pos = bonus {
+    sprite = ["clock"],
+    onAction = action
+  }
+  where
+    bonus = createBonus pos
+    action state id' = do
+      game <- readIORef state
+      let Just obj = lookup id' $ objects game
+          tanks = filter (isTank . snd) $ objects game
+          rect = getRect obj
+          targets = filter (\(_, o) -> rect `isIntersect` (getRect o)) tanks
+      when (not $ null targets) $ do
+        let master = snd $ head targets
+            targetSide = 1 - side master
+            sleepy = map (\(_, o) -> o { sleepTime = 5000 }) $ filter (\(_, o) -> side o == targetSide) tanks
+        writeIORef state $ updateObjects (deleteObject game obj) sleepy
+
+createReinforcingEagle :: Entity
+createReinforcingEagle = ReinforcingEagle {
+    eId = 0,
+    layer = 1,
+    health = 1,
+    location = (0, 0),
+    duration = 20000,
+    size = (cellSize, cellSize),
+    onTimerCallback = timerCallback
+  }
+  where
+    timerCallback state 100 id' = do
+      game <- readIORef state
+      let idea = lookup id' $ objects game
+      when (isJust idea) $ do
+        let obj = fromJust idea
+            newDuration = duration obj - 100
+        if newDuration <= 0 then do
+          let ds = cellSize `div` 2
+              coords = [(11*ds, 0*ds), (11*ds, 1*ds), (11*ds, 2*ds), (12*ds, 2*ds), (13*ds, 2*ds), (14*ds, 2*ds), (14*ds, 1*ds), (14*ds, 0*ds)]
+              obstacles = map snd $ filter (\(i, o) -> any (== location o) coords) $ objects game
+              updGame = deleteObjects (deleteObject game obj) obstacles
+              bricks = map (\coord -> createBrick coord) coords
+          writeIORef state $ registryObjects (deleteObject updGame obj) bricks
+          else
+            writeIORef state $ updateObject game $ obj { duration = newDuration }
+    timerCallback _ _ _ = return ()
+
+createBonusReinforcingEagle :: (Int, Int) -> Entity
+createBonusReinforcingEagle pos = bonus {
+    sprite = ["helmet"],
+    onAction = action
+  }
+  where
+    bonus = createBonus pos
+    action state id' = do
+      game <- readIORef state
+      let Just obj = lookup id' $ objects game
+          tanks = filter (isTank . snd) $ objects game
+          rect = getRect obj
+          targets = filter (\(_, o) -> rect `isIntersect` (getRect o)) tanks
+      when (not $ null targets) $ do
+        let master = snd $ head targets
+            ds = cellSize `div` 2
+            coords = [(11*ds, 0*ds), (11*ds, 1*ds), (11*ds, 2*ds), (12*ds, 2*ds), (13*ds, 2*ds), (14*ds, 2*ds), (14*ds, 1*ds), (14*ds, 0*ds)]
+            obstacles = map snd $ filter (\(i, o) -> any (== location o) coords) $ objects game
+            updGame = deleteObjects (deleteObject game obj) obstacles
+        let armor = if side master == 1 then map (\coord -> createArmor coord) coords else []
+        writeIORef state $ registryObjects (registryObject updGame createReinforcingEagle) armor
+      return ()

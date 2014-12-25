@@ -78,6 +78,7 @@ data Entity =
     moveTowards :: Bool,
     sprite :: TAnimation,
     rechargeTime :: Int,
+    sleepTime :: Int,
     targetDt :: Int,
     targetSprites :: TAnimation,
     spritesEffects :: TAnimation,
@@ -126,9 +127,30 @@ data Entity =
   PostmortemLights {
     eId :: ID,
     layer :: Int,
+    health :: Int,
     duration :: Int,
     size :: TLocation,
     sprite :: TAnimation,
+    location :: TLocation,
+    onTimerCallback :: TTimerCallback
+  } |
+  Bonus {
+    eId :: ID,
+    layer :: Int,
+    health :: Int,
+    duration :: Int,
+    size :: TLocation,
+    sprite :: TAnimation,
+    location :: TLocation,
+    onTimerCallback :: TTimerCallback,
+    onAction :: IORef GameState -> ID  -> IO ()
+  } |
+  ReinforcingEagle { -- вспомогательная штука, для одного из бонусов
+    eId :: ID,
+    layer :: Int,
+    health :: Int,
+    duration :: Int,
+    size :: TLocation,
     location :: TLocation,
     onTimerCallback :: TTimerCallback
   }
@@ -168,6 +190,9 @@ deleteObject state obj = state { objects = deleteObject' $ objects state }
     deleteObject' ((i, o) : objs)
       | i == eId obj = objs
       | otherwise = (i, o) : deleteObject' objs
+
+deleteObjects :: GameState -> [Entity] -> GameState
+deleteObjects state objs = foldl deleteObject state objs
 
 deleteObjectsIf :: GameState -> (Entity -> Bool) -> GameState
 deleteObjectsIf state isDeleted = state { objects = newObjects }
@@ -246,7 +271,7 @@ changeLocation :: TLocation -> (Int, Int) -> TLocation
 changeLocation (x, y) (dx, dy) = (x+dx, y+dy)
 
 isTank :: Entity -> Bool
-isTank (Tank _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _) = True
+isTank (Tank _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _) = True
 isTank _ = False
 
 isBullet :: Entity -> Bool
@@ -270,8 +295,16 @@ isRespawnPoint (RespawnPoint _ _ _ _ _ _ _) = True
 isRespawnPoint _ = False
 
 isPostmortemLights :: Entity -> Bool
-isPostmortemLights (PostmortemLights _ _ _ _ _ _ _) = True
+isPostmortemLights (PostmortemLights _ _ _ _ _ _ _ _) = True
 isPostmortemLights _ = False
+
+isBonus :: Entity -> Bool
+isBonus (Bonus _ _ _ _ _ _ _ _ _) = True
+isBonus _ = False
+
+isReinforcingEagle :: Entity -> Bool
+isReinforcingEagle (ReinforcingEagle _ _ _ _ _ _ _) = True
+isReinforcingEagle _ = False
 
 isImpassableObj :: Entity -> Bool
 isImpassableObj (Obstacle _ _ _ is _ _ _ _ _ _) = is
