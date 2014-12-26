@@ -647,7 +647,7 @@ createRespawnPoint pos = RespawnPoint {
           exists = length $ filter (\(i, o) -> isTank o && side o == 0) $ objects game
       if (enemyTanks game > 0) && isEmpty then do
         let oldEnemyTanks = enemyTanks game
-            order = maxEnemiesTanks - oldEnemyTanks
+            order = maxEnemiesTanks - oldEnemyTanks + 1
         num <- randomIO :: IO Int
         let newGame = case num `mod` 4 of
               0 -> registryObject (game { enemyTanks = oldEnemyTanks - 1 }) $ createNormalTank (location obj) order

@@ -4,22 +4,22 @@ import Control.Monad
 import Data.Array.IArray
 import Data.IORef
 import Data.List
+import System.Exit
 import Game
 import Creators
 import KeyEvent
 import Sprite
 import PathFinder
 
-import Control.Monad(when)
-import System.Exit(exitFailure)
-import System.IO(withBinaryFile, IOMode(ReadMode), openBinaryFile, hGetBuf)
-import Foreign.Marshal.Alloc(allocaBytes)
-
 borderSize = 32
 
 main :: IO ()
 main = do
   (this, args) <- getArgsAndInitialize
+
+  when (null args) $ do
+    putStrLn "Не задана карта!"
+    exitFailure
 
   state <- newIORef $ initGame
 
@@ -30,7 +30,7 @@ main = do
   blend $= Enabled
   blendFunc $= (SrcAlpha, OneMinusSrcAlpha)
 
-  initMap state
+  initMap state $ head args
   initSprites state
   initObjects state
 
@@ -51,9 +51,9 @@ main = do
 
   mainLoop
 
-initMap :: IORef GameState -> IO ()
-initMap state = do
-  grid <- loadMap "grid.map"
+initMap :: IORef GameState -> FilePath -> IO ()
+initMap state file = do
+  grid <- loadMap file
   let h = gridHeight grid
       ds = cellSize `div` 2
   forM_ [0 .. gridWidth grid] $ \i ->
