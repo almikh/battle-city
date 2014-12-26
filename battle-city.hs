@@ -116,7 +116,15 @@ initSprites state = do
         ("rapid0", "resources/rapidtank00_15x15.pic"),
         ("rapid1", "resources/rapidtank01_15x15.pic"),
         ("fast0", "resources/fasttank00_15x15.pic"),
-        ("fast1", "resources/fasttank01_15x15.pic"),
+        ("fast1", "resources/fasttank01_15x15.pic"), ----------
+        ("rnormal0", "resources/rnormaltank00_15x15.pic"),
+        ("rnormal1", "resources/rnormaltank01_15x15.pic"),
+        ("rheavy0", "resources/rheavytank00_15x15.pic"),
+        ("rheavy1", "resources/rheavytank01_15x15.pic"),
+        ("rrapid0", "resources/rrapidtank00_15x15.pic"),
+        ("rrapid1", "resources/rrapidtank01_15x15.pic"),
+        ("rfast0", "resources/rfasttank00_15x15.pic"),
+        ("rfast1", "resources/rfasttank01_15x15.pic"),
         ("numbers", "resources/numbers_160x16.pic"),
         ("life", "resources/life_40x40.pic"),
         ("100", "resources/100_15x15.pic"),
@@ -140,9 +148,7 @@ initObjects :: IORef GameState -> IO ()
 initObjects state = do
   game <- readIORef state
   let objs = [
-        createHero (4*cellSize, 0*cellSize),
-        createNormalTank (0*cellSize, 12*cellSize),
-        createInvulnerabilityTank (4*cellSize, 3*cellSize) ]
+        createHero (4*cellSize, 0*cellSize) ]
   writeIORef state $ registryObjects game objs
   putStrLn "Objects loaded..."
 

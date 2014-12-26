@@ -6,6 +6,7 @@ import System.Random
 import Control.Monad
 import Data.Array.IArray
 import qualified Data.Map as Map
+import System.Random.Shuffle
 import Data.IORef
 import Data.List
 import Data.Maybe
@@ -23,7 +24,10 @@ screenHeight :: Int
 screenHeight = 32*13
 
 respawnTime :: Int
-respawnTime = 25000
+respawnTime = 23000
+
+numberOfTanksBonus :: [Int]
+numberOfTanksBonus = [1, 3]
 
 loadMap :: FilePath -> IO TGrid
 loadMap file = do
@@ -112,6 +116,9 @@ printGrid grid = do
           putStr $ "  " ++ show (grid ! (i, h-j))
     putStrLn ""
   return ()
+
+freeCells :: TGrid -> [(Int, Int)]
+freeCells grid = map fst $ filter (\(k, v) -> v==0) $ assocs grid
 
 createTank :: (Int, Int) -> Entity
 createTank pos = Tank {
@@ -373,47 +380,51 @@ createHero pos = tank {
         let newRecharge = (\r -> if r /= 0 then r - dt else r) $ recharges obj
         writeIORef state $ updateObject game $ obj { recharges = newRecharge }
 
-createHeavyTank :: (Int, Int) -> Entity
-createHeavyTank pos = tank {
+createHeavyTank :: (Int, Int) -> Int -> Entity
+createHeavyTank pos num = tank {
     side = 0,
     health = 4,
     price = 400,
     targetDt = slowDt,
-    targetSprites = ["heavy0", "heavy1"],
+    targetSprites = if not $ any (==num) numberOfTanksBonus then ["heavy0", "heavy1"]
+                    else ["heavy0", "heavy1", "heavy0", "heavy1", "rheavy0", "rheavy1", "rheavy0", "rheavy1"],
     onKeyboardCallback = (\_ _ _ -> return ())
   }
   where
     tank = createTank pos
 
-createNormalTank :: (Int, Int) -> Entity
-createNormalTank pos = tank {
+createNormalTank :: (Int, Int) -> Int -> Entity
+createNormalTank pos num = tank {
     side = 0,
     price = 100,
     targetDt = normalDt,
-    targetSprites = ["normal0", "normal1"],
+    targetSprites = if not $ any (==num) numberOfTanksBonus then ["normal0", "normal1"]
+                    else ["normal0", "normal1", "normal0", "normal1", "rnormal0", "rnormal1", "rnormal0", "rnormal1"],
     onKeyboardCallback = (\_ _ _ -> return ())
   }
   where
     tank = createTank pos
 
-createRapidFireTank :: (Int, Int) -> Entity
-createRapidFireTank pos = tank {
+createRapidFireTank :: (Int, Int) -> Int -> Entity
+createRapidFireTank pos num = tank {
     side = 0,
     price = 300,
     targetDt = normalDt,
     rechargeTime = normalRechargeTime `div` 2,
-    targetSprites = ["rapid0", "rapid1"],
+    targetSprites = if not $ any (==num) numberOfTanksBonus then ["rapid0", "rapid1"]
+                    else ["rapid0", "rapid1", "rapid0", "rapid1", "rrapid0", "rrapid1", "rrapid0", "rrapid1"],
     onKeyboardCallback = (\_ _ _ -> return ())
   }
   where
     tank = createTank pos
 
-createArmoredVehicle :: (Int, Int) -> Entity
-createArmoredVehicle pos = tank {
+createArmoredVehicle :: (Int, Int) -> Int -> Entity
+createArmoredVehicle pos num = tank {
     side = 0,
     price = 200,
     targetDt = fastDt,
-    targetSprites = ["fast0", "fast1"],
+    targetSprites = if not $ any (==num) numberOfTanksBonus then ["fast0", "fast1"]
+                    else ["fast0", "fast1", "fast0", "fast1", "rfast0", "rfast1", "rfast0", "rfast1"],
     onKeyboardCallback = (\_ _ _ -> return ())
   }
   where
@@ -461,6 +472,17 @@ createBullet sd pos dir = Bullet {
                     isGameOver = (newLifes <= 0) || (not $ null eagle)
                     booms = map (\o -> createBigBoom (nx + (sx `div` 2), ny + (sy `div` 2)) (32, 32)) deleted
                     postmortemLights = map (\o -> createPostmortemLights (location o) (price o)) $ filter (\o -> isTank o && side o == 0) deleted
+                    nbonuses = length $ filter (\o -> isTank o && length (sprite o) > 4) deleted
+
+                    createBonus = \_ -> do
+                      let cells = freeCells (createAccessGrid game)
+                      gen <- getStdGen
+                      let targetCell@(x, y) = head $ shuffle' cells (length cells) gen
+                      num <- randomIO :: IO Int
+                      case num `mod` 3 of
+                            0 -> return $ createBonusClock (x*cellSize, y*cellSize)
+                            1 -> return $ createBonusReinforcingEagle (x*cellSize, y*cellSize)
+                            2 -> return $ createInvulnerabilityTank (x*cellSize, y*cellSize)
 
                 if isGameOver then
                   if not $ null eagle then do
@@ -472,13 +494,16 @@ createBullet sd pos dir = Bullet {
                       let eagle = snd $ head $ filter (isStandart . snd) others
                           newGame = deleteObjectsIf (updateObjects game updated) (\o -> eId o == id' || health o <= 0)
                       writeIORef state $ updateObject (newGame { lifes = newLifes }) $ eagle { health = 100500, sprite = ["fall_standart"] }
-                  else if existsHero then do
-                    let newGame = deleteObjectsIf (updateObjects game updated) (\o -> eId o == id' || health o <= 0)
-                        withNewHero = registryObject (newGame { lifes = newLifes }) $ createHero (4*cellSize, 0*cellSize)
-                    writeIORef state $ registryObjects withNewHero (booms ++ postmortemLights)
-                    else do
+                  else do
+                    bonus <- createBonus obj
+                    let bonuses = if nbonuses == 0 then [] else [bonus]
+                    if existsHero then do
                       let newGame = deleteObjectsIf (updateObjects game updated) (\o -> eId o == id' || health o <= 0)
-                      writeIORef state $ registryObjects newGame (booms ++ postmortemLights)
+                          withNewHero = registryObject (newGame { lifes = newLifes }) $ createHero (4*cellSize, 0*cellSize)
+                      writeIORef state $ registryObjects withNewHero (booms ++ postmortemLights ++ bonuses)
+                      else do
+                        let newGame = deleteObjectsIf (updateObjects game updated) (\o -> eId o == id' || health o <= 0)
+                        writeIORef state $ registryObjects newGame (booms ++ postmortemLights ++ bonuses)
 
                 when (null deleted) $ do
                   game <- readIORef state
@@ -602,7 +627,7 @@ createRespawnPoint pos = RespawnPoint {
     eId = 0,
     layer = 1,
     health = 1,
-    duration = 0,
+    duration = respawnTime,
     size = (cellSize, cellSize),
     location = pos,
     onTimerCallback = timerCallback
@@ -618,14 +643,15 @@ createRespawnPoint pos = RespawnPoint {
           oldDuration = duration obj
           isEmpty = null $ filter (\(i, o) -> isTank o && location o == thisCoord) $ objects game
           exists = length $ filter (\(i, o) -> isTank o && side o == 0) $ objects game
-      if (enemyTanks game > 0) && isEmpty && (exists<4) && (oldDuration >= respawnTime) then do
+      if (enemyTanks game > 0) && isEmpty && (((exists<4) && (oldDuration >= respawnTime)) || exists==0) then do
         let oldEnemyTanks = enemyTanks game
+            order = maxEnemiesTanks - oldEnemyTanks
         num <- randomIO :: IO Int
         let newGame = case num `mod` 4 of
-              0 -> registryObject (game { enemyTanks = oldEnemyTanks - 1 }) $ createNormalTank (location obj)
-              1 -> registryObject (game { enemyTanks = oldEnemyTanks - 1 }) $ createHeavyTank (location obj)
-              2 -> registryObject (game { enemyTanks = oldEnemyTanks - 1 }) $ createRapidFireTank (location obj)
-              3 -> registryObject (game { enemyTanks = oldEnemyTanks - 1 }) $ createArmoredVehicle (location obj)
+              0 -> registryObject (game { enemyTanks = oldEnemyTanks - 1 }) $ createNormalTank (location obj) order
+              1 -> registryObject (game { enemyTanks = oldEnemyTanks - 1 }) $ createHeavyTank (location obj) order
+              2 -> registryObject (game { enemyTanks = oldEnemyTanks - 1 }) $ createRapidFireTank (location obj) order
+              3 -> registryObject (game { enemyTanks = oldEnemyTanks - 1 }) $ createArmoredVehicle (location obj) order
         writeIORef state $ updateObject newGame $ obj { duration = 0 }
         else
           writeIORef state $ updateObject game $ obj { duration = oldDuration + 100 }
@@ -702,7 +728,8 @@ createBonusClock pos = bonus {
         let master = snd $ head targets
             targetSide = 1 - side master
             sleepy = map (\(_, o) -> o { sleepTime = 5000 }) $ filter (\(_, o) -> side o == targetSide) tanks
-        writeIORef state $ updateObjects (deleteObject game obj) sleepy
+            postmortemLight = createPostmortemLights (location obj) 500
+        writeIORef state $ registryObject (updateObjects (deleteObject game obj) sleepy) postmortemLight
 
 createReinforcingEagle :: Entity
 createReinforcingEagle = ReinforcingEagle {
@@ -752,7 +779,8 @@ createBonusReinforcingEagle pos = bonus {
             obstacles = map snd $ filter (\(i, o) -> any (== location o) coords) $ objects game
             updGame = deleteObjects (deleteObject game obj) obstacles
         let armor = if side master == 1 then map (\coord -> createArmor coord) coords else []
-        writeIORef state $ registryObjects (registryObject updGame createReinforcingEagle) armor
+            postmortemLight = createPostmortemLights (location obj) 500
+        writeIORef state $ registryObjects (registryObject updGame createReinforcingEagle) (armor ++ [postmortemLight])
       return ()
 
 createInvulnerabilityTank :: (Int, Int) -> Entity
@@ -771,4 +799,5 @@ createInvulnerabilityTank pos = bonus {
       when (not $ null targets) $ do
         let master = snd $ head targets
             newMaster = if side master == 1 then master { invulnerable = 100, spritesEffects = ["field:0", "field:1"] } else master
-        writeIORef state $ updateObject (deleteObject game obj) newMaster
+            postmortemLight = createPostmortemLights (location obj) 500
+        writeIORef state $ registryObject (updateObject (deleteObject game obj) newMaster) postmortemLight

@@ -22,6 +22,9 @@ normalDt = 24
 fastDt :: Int
 fastDt = 12
 
+maxEnemiesTanks :: Int
+maxEnemiesTanks = 20
+
 type TLocation = (Int, Int)
 type TSize = (Int, Int)
 type TMessage = String
@@ -163,7 +166,7 @@ registrySprites :: GameState -> [(String, Sprite)] -> GameState
 registrySprites state sprs = state { sprites = sprs ++ (sprites state) }
 
 initGame :: GameState
-initGame = GameState 0 1 0 18 [] [] [] False 2
+initGame = GameState 0 1 0 maxEnemiesTanks [] [] [] False 2
 
 updateObject :: GameState -> Entity -> GameState
 updateObject state obj = state { objects = (updateObject' $ objects state) }

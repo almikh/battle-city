@@ -6,3 +6,4 @@ battle-city
 Зависимости:
 cabal update
 cabal install glut
+cabal install random-shuffle
