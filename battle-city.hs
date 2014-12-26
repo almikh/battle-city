@@ -17,26 +17,9 @@ import Foreign.Marshal.Alloc(allocaBytes)
 
 borderSize = 32
 
-test :: IO ()
-test = do
-  let grid = newGrid 5 5
-      new = runWave (grid // [((0, 1), -1), ((1, 0), -1)]) (1, 3)
-      path = findPath new (1, 3) (4, 0)
-  mapM_ print path
-  forM_ [0 .. (gridWidth grid)] $ \i -> do
-    forM_ [0 .. (gridHeight grid)] $ \j -> do
-      if new ! (i, j) < 0 then
-        putStr $ " " ++ show (new ! (i, j)) ++ " "
-        else
-          putStr $ "  " ++ show (new ! (i, j)) ++ " "
-    putStrLn ""
-  return ()
-
 main :: IO ()
 main = do
   (this, args) <- getArgsAndInitialize
-
-  -- test
 
   state <- newIORef $ initGame
 

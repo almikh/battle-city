@@ -347,15 +347,19 @@ createHero pos = tank {
       when (isJust idea) $ do
         obj <- checkInvulnerable $ fromJust idea
         let newSleepTime = if sleepTime obj > 0 then sleepTime obj - 100 else 0
-
+            (s:ss) = sprite obj
         if (lifetime obj == 6) then do
           let newLife = lifetime obj + 1
               ts = targetSprites obj
               se = ["field:0", "field:1"]
           writeIORef state $ updateObject game $ obj { sleepTime = newSleepTime, lifetime = newLife, sprite = ts, invulnerable = 12, spritesEffects = se }
-          else do
-            let (s:ss) = sprite obj
+          else if (lifetime obj < 6) then
             writeIORef state $ updateObject game $ obj { sleepTime = newSleepTime, lifetime = lifetime obj + 1, sprite = (ss ++ [s]) }
+            else do
+              let mvKeys = [MoveLeftward, MoveRightward, MoveForward, MoveBackward]
+                  int = intersect mvKeys $ keys game
+                  newSprites = if not $ null int then (ss ++ [s]) else (s:ss)
+              writeIORef state $ updateObject game $ obj { sleepTime = newSleepTime, lifetime = lifetime obj + 1, sprite = newSprites }
     timerCallback state dt id' = do
       game <- readIORef state
       let idea = lookup id' $ objects game
