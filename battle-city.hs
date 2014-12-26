@@ -45,7 +45,7 @@ main = do
   addTimerCallback normalDt (timerDt state normalDt)
   addTimerCallback fastDt (timerDt state fastDt)
   addTimerCallback 600 (timerDt state 600)
-  addTimerCallback 12 (bulletsTimer state 12)
+  addTimerCallback bulletDt (bulletsTimer state bulletDt)
   addTimerCallback 100 (animTimer state 100)
   addTimerCallback 1000 (fpsTimer state 1000)
 
@@ -166,14 +166,15 @@ renderObject game obj
       let Just sprite = lookup (head (spritesEffects obj)) $ sprites game
       drawSprite sprite rect
   | isRespawnPoint obj = do
-    polygonMode $= (Line, Line)
-    currentColor $= Color4 1.0 1.0 1.0 1.0
-    renderPrimitive Quads $ do
-      vertex $ Vertex2 (i2f (x+borderSize)) (i2f (y+borderSize))
-      vertex $ Vertex2 (i2f (x+borderSize)) (i2f (y+h+borderSize))
-      vertex $ Vertex2 (i2f (x+w+borderSize)) (i2f (y+h+borderSize))
-      vertex $ Vertex2 (i2f (x+w+borderSize)) (i2f (y+borderSize))
-    polygonMode $= (Fill, Fill)
+    -- polygonMode $= (Line, Line)
+    -- currentColor $= Color4 1.0 1.0 1.0 1.0
+    -- renderPrimitive Quads $ do
+    --   vertex $ Vertex2 (i2f (x+borderSize)) (i2f (y+borderSize))
+    --   vertex $ Vertex2 (i2f (x+borderSize)) (i2f (y+h+borderSize))
+    --   vertex $ Vertex2 (i2f (x+w+borderSize)) (i2f (y+h+borderSize))
+    --   vertex $ Vertex2 (i2f (x+w+borderSize)) (i2f (y+borderSize))
+    -- polygonMode $= (Fill, Fill)
+    return ()
   | otherwise = do
     drawSprite sprite rect
     where

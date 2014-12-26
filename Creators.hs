@@ -15,7 +15,7 @@ import PathFinder
 
 steps = 12
 cellSize = 32
-normalRechargeTime = 1000
+normalRechargeTime = 700
 
 screenWidth :: Int
 screenWidth = 32*13
@@ -24,10 +24,10 @@ screenHeight :: Int
 screenHeight = 32*13
 
 respawnTime :: Int
-respawnTime = 23000
+respawnTime = 15000
 
 numberOfTanksBonus :: [Int]
-numberOfTanksBonus = [1, 3]
+numberOfTanksBonus = [4, 11, 18]
 
 loadMap :: FilePath -> IO TGrid
 loadMap file = do
@@ -296,6 +296,7 @@ createHero pos = tank {
     side = 1,
     targetDt = normalDt,
     targetSprites = ["hero0", "hero1"],
+    rechargeTime = normalRechargeTime - 50,
     onKeyboardCallback = keyboardCallback,
     onTimerCallback = timerCallback
   }
@@ -445,7 +446,7 @@ createBullet sd pos dir = Bullet {
   }
   where
     timerCallback state dt id' = do
-      when (dt==fastDt) $ do
+      when (dt==bulletDt) $ do
         game <- readIORef state
         let idea = lookup id' $ objects game
         when (isJust idea) $ do
@@ -641,9 +642,10 @@ createRespawnPoint pos = RespawnPoint {
       let obj = fromJust idea
           thisCoord = location obj
           oldDuration = duration obj
-          isEmpty = null $ filter (\(i, o) -> isTank o && location o == thisCoord) $ objects game
+          dist (x1, y1) (x2, y2) = sqrt $ fromIntegral $ (x1-x2)^2 + (y1-y2)^2
+          isEmpty = null $ filter (\(i, o) -> isTank o && dist (location o) thisCoord < 1.5*(fromIntegral cellSize)) $ objects game
           exists = length $ filter (\(i, o) -> isTank o && side o == 0) $ objects game
-      if (enemyTanks game > 0) && isEmpty && (((exists<4) && (oldDuration >= respawnTime)) || exists==0) then do
+      if (enemyTanks game > 0) && isEmpty then do
         let oldEnemyTanks = enemyTanks game
             order = maxEnemiesTanks - oldEnemyTanks
         num <- randomIO :: IO Int
@@ -652,7 +654,12 @@ createRespawnPoint pos = RespawnPoint {
               1 -> registryObject (game { enemyTanks = oldEnemyTanks - 1 }) $ createHeavyTank (location obj) order
               2 -> registryObject (game { enemyTanks = oldEnemyTanks - 1 }) $ createRapidFireTank (location obj) order
               3 -> registryObject (game { enemyTanks = oldEnemyTanks - 1 }) $ createArmoredVehicle (location obj) order
-        writeIORef state $ updateObject newGame $ obj { duration = 0 }
+
+        if (exists<4) && (oldDuration >= respawnTime) then
+          writeIORef state $ updateObject newGame $ obj { duration = 0 }
+          else do
+            if (exists==0) then writeIORef state newGame
+              else writeIORef state $ updateObject game $ obj { duration = oldDuration + 100 }
         else
           writeIORef state $ updateObject game $ obj { duration = oldDuration + 100 }
   timerCallback _ _ _ = return ()

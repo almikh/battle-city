@@ -14,13 +14,16 @@ screenRect :: ((Int, Int), (Int, Int))
 screenRect = ((0, 0), (32*13, 32*13))
 
 slowDt :: Int
-slowDt = 36
+slowDt = 30
 
 normalDt :: Int
-normalDt = 24
+normalDt = 20
 
 fastDt :: Int
-fastDt = 12
+fastDt = 10
+
+bulletDt :: Int
+bulletDt = 5
 
 maxEnemiesTanks :: Int
 maxEnemiesTanks = 20
