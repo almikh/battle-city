@@ -125,6 +125,7 @@ initSprites state = do
         ("400", "resources/400_15x15.pic"),
         ("500", "resources/500_15x15.pic"),
         ("clock", "resources/clock_15x15.pic"),
+        ("spade", "resources/spade_15x15.pic"),
         ("helmet", "resources/helmet_15x15.pic") ]
 
 
@@ -141,7 +142,7 @@ initObjects state = do
   let objs = [
         createHero (4*cellSize, 0*cellSize),
         createNormalTank (0*cellSize, 12*cellSize),
-        createBonusReinforcingEagle (4*cellSize, 2*cellSize) ]
+        createInvulnerabilityTank (4*cellSize, 3*cellSize) ]
   writeIORef state $ registryObjects game objs
   putStrLn "Objects loaded..."
 

@@ -363,9 +363,10 @@ createHero pos = tank {
     timerCallback state dt id' = do
       game <- readIORef state
       let idea = lookup id' $ objects game
-      when (isJust idea && (lifetime (fromJust idea) >= 6) && (sleepTime (fromJust idea) == 0) &&  (dt == targetDt (fromJust idea))) $ do
+      when (isJust idea && (lifetime (fromJust idea) >= 6) &&  (dt == targetDt (fromJust idea))) $ do
         forM_ (keys game) $ \key -> do -- обработаем события клавиатуры
-          (onKeyboardCallback (fromJust idea)) state key id'
+          when (sleepTime (fromJust idea) == 0 || (key == Fire)) $
+            (onKeyboardCallback (fromJust idea)) state key id'
 
         game <- readIORef state
         let Just obj = lookup id' $ objects game
@@ -733,7 +734,7 @@ createReinforcingEagle = ReinforcingEagle {
 
 createBonusReinforcingEagle :: (Int, Int) -> Entity
 createBonusReinforcingEagle pos = bonus {
-    sprite = ["helmet"],
+    sprite = ["spade"],
     onAction = action
   }
   where
@@ -753,3 +754,21 @@ createBonusReinforcingEagle pos = bonus {
         let armor = if side master == 1 then map (\coord -> createArmor coord) coords else []
         writeIORef state $ registryObjects (registryObject updGame createReinforcingEagle) armor
       return ()
+
+createInvulnerabilityTank :: (Int, Int) -> Entity
+createInvulnerabilityTank pos = bonus {
+    sprite = ["helmet"],
+    onAction = action
+  }
+  where
+    bonus = createBonus pos
+    action state id' = do
+      game <- readIORef state
+      let Just obj = lookup id' $ objects game
+          tanks = filter (isTank . snd) $ objects game
+          rect = getRect obj
+          targets = filter (\(_, o) -> rect `isIntersect` (getRect o)) tanks
+      when (not $ null targets) $ do
+        let master = snd $ head targets
+            newMaster = if side master == 1 then master { invulnerable = 100, spritesEffects = ["field:0", "field:1"] } else master
+        writeIORef state $ updateObject (deleteObject game obj) newMaster
