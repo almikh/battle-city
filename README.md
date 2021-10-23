@@ -1,16 +1,13 @@
-battle-city
-===========
+# Battle City remake on Haskell
 
-Полный (!) клон игры Battle City, написанная на Haskell.
+A complete (!) clone of the Battle City game, written in Haskell.
 
-Проектное задание по курсу "Функциональное программирование".
-
-## Зависимости
+## Dependencies
 - `cabal update`
 - `cabal install glut`
 - `cabal install random-shuffle`
 
-## Управление
-- `A`, `S`, `D`, `W` - движение.
-- `Space` - стрельба.
-- `P` - пауза.
+## Control
+- `A`, `S`, `D`, `W` - movement.
+- `Space` - shooting.
+- `P` - pause.
